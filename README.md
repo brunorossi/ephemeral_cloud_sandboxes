@@ -86,5 +86,4 @@ environments/<env>/
   (`floci/floci-az`, port 4577, TLS) for `floci-azure`. Both include a privileged
   Docker-in-Docker sidecar (so Docker-backed services work) and share the same
   quota. The emulator is the only difference.
-# ephemeral_cloud_sandboxes
-# ephemeral_cloud_sandboxes
+

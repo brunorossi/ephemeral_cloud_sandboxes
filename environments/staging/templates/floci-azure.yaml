@@ -1,0 +1,161 @@
+# =============================================================================
+# TEMPLATE: floci-azure — STAGING  (Azure emulator)
+# =============================================================================
+# Differs from floci-aws ONLY by the floci.io emulator deployed inside the
+# vcluster (Azure here). Quota, distro, ingress, and storage are identical.
+# Field reference: UffizziCluster CRD (uffizzi.com/v1alpha1).
+# =============================================================================
+apiVersion: uffizzi.com/v1alpha1
+kind: UffizziCluster
+metadata:
+  name: dev-<username>            # <-- per-developer, unique (one per developer)
+  namespace: eph-env
+  labels:
+    floci.dev/template: floci-azure
+spec:
+  distro: k3s
+  # ---- floci.io AZURE emulator deployed INSIDE the vcluster ----
+  # The floci/floci-az image serves the Azure API on :4577.
+  #
+  # A Docker-in-Docker (DinD) sidecar gives floci-az a PRIVATE Docker daemon
+  # (FLOCI_AZ_DOCKER_DOCKER_HOST=tcp://localhost:2375) so the Docker-backed
+  # services (Azure Functions, Event Hubs, Service Bus, Azure SQL, AKS, Redis,
+  # Container Apps/Registry, and the Cosmos multi-API engines) work too,
+  # without exposing the host node's Docker/containerd socket.
+  #
+  # TLS is enabled (FLOCI_AZ_TLS_ENABLED=true) because the Cosmos DB Java SDK
+  # and the Terraform/OpenTofu azurerm provider require HTTPS. HTTP and HTTPS
+  # are served on the same port 4577 via floci-az's protocol-sniffing proxy.
+  #
+  # SECURITY: the DinD sidecar runs `privileged: true`. This is scoped to THIS
+  # pod (not the host), but a privileged container can still escape in theory.
+  # It is isolated per-developer vcluster. The daemon uses an emptyDir, so all
+  # spawned containers and their data are ephemeral (lost on pod restart).
+  #
+  # NOTE: the Cosmos multi-API engines (Mongo/Postgres/Cassandra/Gremlin) are
+  # disabled by default even with Docker; enable per engine with
+  # FLOCI_AZ_SERVICES_COSMOS_ENGINES_<API>_ENABLED=true.
+  manifests: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: floci-azure
+      namespace: default
+      labels:
+        app: floci-azure
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: floci-azure
+      template:
+        metadata:
+          labels:
+            app: floci-azure
+        spec:
+          containers:
+            - name: floci
+              image: floci/floci-az:latest   # <-- pin an exact tag (e.g. floci/floci-az:x.y.z)
+              ports:
+                - containerPort: 4577
+              env:
+                - name: FLOCI_AZ_PORT
+                  value: "4577"
+                - name: FLOCI_AZ_STORAGE_MODE
+                  value: memory
+                # Serve HTTP + HTTPS on 4577 (Cosmos Java SDK / azurerm need TLS).
+                - name: FLOCI_AZ_TLS_ENABLED
+                  value: "true"
+                # Point floci-az at the DinD sidecar instead of a host socket.
+                - name: FLOCI_AZ_DOCKER_DOCKER_HOST
+                  value: tcp://localhost:2375
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+            # ---- Docker-in-Docker sidecar: floci-az's private container runtime ----
+            - name: dind
+              image: docker:27-dind   # <-- pin an exact tag (e.g. docker:27.3.1-dind)
+              securityContext:
+                privileged: true
+              env:
+                # Disable TLS so floci-az can reach the daemon on plain tcp://:2375.
+                - name: DOCKER_TLS_CERTDIR
+                  value: ""
+              args:
+                - --host=tcp://0.0.0.0:2375
+                - --host=unix:///var/run/docker.sock
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+              volumeMounts:
+                - name: dind-storage
+                  mountPath: /var/lib/docker
+          volumes:
+            - name: dind-storage
+              emptyDir: {}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: floci-azure
+      namespace: default
+      labels:
+        app: floci-azure
+    spec:
+      selector:
+        app: floci-azure
+      ports:
+        - name: http
+          port: 4577
+          targetPort: 4577
+    ---
+    # Ingress inside the vcluster; Uffizzi exposes it through the host cluster.
+    # NOTE: routes plain HTTP to :4577. The emulator also serves HTTPS on the same
+    # port, but this ingress is HTTP; use in-cluster HTTPS or port-forward for the
+    # Cosmos Java SDK / azurerm TLS paths.
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: floci-azure
+      namespace: default
+      labels:
+        app: floci-azure
+    spec:
+      ingressClassName: traefik
+      rules:
+        - host: floci-azure-<username>.staging.local   # HTTP-only; resolve to the node IP
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: floci-azure
+                    port:
+                      number: 4577
+  ingress:
+    class: traefik
+    host: dev-<username>.staging.local   # HTTP-only ephemeral env hostname
+  storage:
+    persistence: true
+    size: 5Gi
+  # ---- resource quota (identical to floci-aws; sized for the floci-az + DinD pod). ----
+  resourceQuota:
+    enabled: true
+    requests:
+      cpu: "1"
+      memory: 2Gi
+      ephemeralStorage: 10Gi
+      storage: 10Gi
+    limits:
+      cpu: "3"
+      memory: 4Gi
+      ephemeralStorage: 10Gi

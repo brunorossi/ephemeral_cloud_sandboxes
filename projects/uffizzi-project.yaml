@@ -1,0 +1,32 @@
+# ArgoCD AppProject for Uffizzi.
+# Added into the EXISTING argocd namespace (ArgoCD is a prerequisite, not managed here).
+# Restricts source repos and destination namespaces for safety.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: uffizzi
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Uffizzi self-hosted (app-of-apps) on single-node K3s + Traefik (HTTP-only)
+  sourceRepos:
+    # This GitOps repo
+    - "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    # Helm repositories used by child Applications (verify exact URLs on install)
+    - "https://uffizzicloud.github.io/uffizzi_app"
+    - "https://uffizzicloud.github.io/uffizzi_controller"
+    - "https://uffizzicloud.github.io/uffizzi-cluster-operator"
+    - "https://bitnami-labs.github.io/sealed-secrets"
+  destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: eph-env
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    # CRDs (UffizziCluster, SealedSecret) require cluster-scoped access
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

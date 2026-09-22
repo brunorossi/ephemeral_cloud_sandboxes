@@ -1,0 +1,33 @@
+# uffizzi-cluster-operator: manages UffizziCluster CRDs -> vclusters (ephemeral envs).
+# Multi-source: chart from Helm repo + values from this Git repo (ref: values).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-cluster-operator-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  sources:
+    - repoURL: "https://uffizzicloud.github.io/uffizzi-cluster-operator"  # <-- verify
+      chart: uffizzi-cluster-operator
+      targetRevision: "*"        # <-- pin exact version
+      helm:
+        valueFiles:
+          - $values/environments/dev/cluster-operator-values.yaml
+    - repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: eph-env
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

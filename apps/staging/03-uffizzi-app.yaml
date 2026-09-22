@@ -1,0 +1,33 @@
+# uffizzi-app: REST API (Rails) + Sidekiq. Endpoint used by the Uffizzi CLI.
+# Depends on PostgreSQL + Redis (subcharts) and the controller.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-app-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  sources:
+    - repoURL: "https://uffizzicloud.github.io/uffizzi_app"  # <-- verify
+      chart: uffizzi-app
+      targetRevision: "1.3.0"    # <-- verify latest
+      helm:
+        valueFiles:
+          - $values/environments/staging/app-values.yaml
+    - repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: eph-env
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

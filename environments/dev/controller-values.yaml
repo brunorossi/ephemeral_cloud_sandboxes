@@ -1,0 +1,29 @@
+# =============================================================================
+# VALUES: uffizzi-controller — DEV (HTTP-only)
+# =============================================================================
+# No TLS: cert-manager and any ClusterIssuer are disabled. Ingress via Traefik.
+# Confirm exact keys with `helm show values uffizzi-controller/uffizzi-controller`.
+# =============================================================================
+
+# HTTP-only ingress through K3s Traefik
+ingress:
+  hostname: api.dev.local        # <-- API/controller hostname (HTTP)
+  # If the chart supports an ingress class / tls toggle, force HTTP here:
+  # className: traefik
+  # tls: false
+
+# Disable TLS/cert issuance entirely
+clusterIssuer: ""                # no cert-manager issuer
+certEmail: ""                    # not used (no ACME)
+cert-manager:
+  enabled: false                 # do not install cert-manager as a dependency
+  installCRDs: false
+
+image: uffizzi/controller:latest # <-- pin an exact tag
+env: "production"
+sandbox: "false"
+podCidr: 10.42.0.0/16            # K3s default pod CIDR (verify on the node)
+
+# Controller <-> app shared credentials come from a SealedSecret (see
+# environments/dev/sealed-secrets/). These MUST match uffizzi.controller.* in
+# app-values.yaml. Do NOT put plaintext credentials here.

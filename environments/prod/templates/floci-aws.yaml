@@ -1,0 +1,158 @@
+# =============================================================================
+# TEMPLATE: floci-aws — PROD  (AWS emulator)
+# =============================================================================
+# This is a REFERENCE UffizziCluster preset. floci-aws and floci-azure differ
+# ONLY by the floci.io emulator deployed inside the vcluster (AWS here). Quota,
+# distro, ingress, and storage are identical between the two.
+#
+# Usage: a developer's single vcluster is created from this preset. Replace
+# <username> with the developer's name (naming convention: dev-<username>).
+# Field reference: UffizziCluster CRD (uffizzi.com/v1alpha1).
+# =============================================================================
+apiVersion: uffizzi.com/v1alpha1
+kind: UffizziCluster
+metadata:
+  name: dev-<username>            # <-- per-developer, unique (one per developer)
+  namespace: eph-env
+  labels:
+    floci.dev/template: floci-aws
+spec:
+  distro: k3s
+  # ---- floci.io AWS emulator deployed INSIDE the vcluster ----
+  # The floci/floci image serves the AWS API on :4566.
+  #
+  # A Docker-in-Docker (DinD) sidecar gives floci a PRIVATE Docker daemon
+  # (DOCKER_HOST=tcp://localhost:2375) so the Docker-backed services (Lambda,
+  # RDS, ElastiCache, ECS, EC2, EKS, MSK, OpenSearch, CodeBuild, ...) work
+  # too, without exposing the host node's Docker/containerd socket.
+  #
+  # SECURITY: the DinD sidecar runs `privileged: true`. This is scoped to THIS
+  # pod (not the host), but a privileged container can still escape in theory.
+  # It is isolated per-developer vcluster. The daemon uses an emptyDir, so all
+  # spawned containers and their data are ephemeral (lost on pod restart).
+  manifests: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: floci-aws
+      namespace: default
+      labels:
+        app: floci-aws
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: floci-aws
+      template:
+        metadata:
+          labels:
+            app: floci-aws
+        spec:
+          containers:
+            - name: floci
+              image: floci/floci:latest   # <-- pin an exact tag (e.g. floci/floci:x.y.z)
+              ports:
+                - containerPort: 4566
+              env:
+                - name: FLOCI_PORT
+                  value: "4566"
+                - name: FLOCI_DEFAULT_REGION
+                  value: us-east-1
+                - name: FLOCI_STORAGE_MODE
+                  value: memory
+                # Point floci at the DinD sidecar instead of a host socket.
+                - name: DOCKER_HOST
+                  value: tcp://localhost:2375
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              readinessProbe:
+                httpGet:
+                  path: /_localstack/health
+                  port: 4566
+                initialDelaySeconds: 10
+                periodSeconds: 10
+            # ---- Docker-in-Docker sidecar: floci's private container runtime ----
+            - name: dind
+              image: docker:27-dind   # <-- pin an exact tag (e.g. docker:27.3.1-dind)
+              securityContext:
+                privileged: true
+              env:
+                # Disable TLS so floci can reach the daemon on plain tcp://:2375.
+                - name: DOCKER_TLS_CERTDIR
+                  value: ""
+              args:
+                - --host=tcp://0.0.0.0:2375
+                - --host=unix:///var/run/docker.sock
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: 512Mi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+              volumeMounts:
+                - name: dind-storage
+                  mountPath: /var/lib/docker
+          volumes:
+            - name: dind-storage
+              emptyDir: {}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: floci-aws
+      namespace: default
+      labels:
+        app: floci-aws
+    spec:
+      selector:
+        app: floci-aws
+      ports:
+        - name: http
+          port: 4566
+          targetPort: 4566
+    ---
+    # Ingress inside the vcluster; Uffizzi exposes it through the host cluster.
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: floci-aws
+      namespace: default
+      labels:
+        app: floci-aws
+    spec:
+      ingressClassName: traefik
+      rules:
+        - host: floci-aws-<username>.prod.local   # HTTP-only; resolve to the node IP
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: floci-aws
+                    port:
+                      number: 4566
+  ingress:
+    class: traefik
+    host: dev-<username>.prod.local   # HTTP-only ephemeral env hostname
+  storage:
+    persistence: true
+    size: 5Gi
+  # ---- resource quota (identical to floci-azure; sized for the floci + DinD pod). ----
+  resourceQuota:
+    enabled: true
+    requests:
+      cpu: "1"
+      memory: 2Gi
+      ephemeralStorage: 10Gi
+      storage: 10Gi
+    limits:
+      cpu: "3"
+      memory: 4Gi
+      ephemeralStorage: 10Gi

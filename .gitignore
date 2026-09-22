@@ -1,0 +1,25 @@
+# Rendered / temporary output
+*.rendered.yaml
+/tmp/
+rendered/
+
+# Local kubeconfigs
+kubeconfig
+*.kubeconfig
+.kube/
+
+# Decrypted secrets — NEVER commit these. Only SealedSecrets belong in Git.
+*.secret.yaml
+*-secret-plain.yaml
+secrets-plain/
+*.dec.yaml
+
+# Helm
+charts/*.tgz
+.helm/
+
+# Editor/OS noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

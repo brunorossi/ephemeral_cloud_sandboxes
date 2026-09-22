@@ -1,0 +1,33 @@
+# uffizzi-controller: smart proxy between the Uffizzi API and the Kubernetes API.
+# Multi-source: chart + values from this Git repo. HTTP-only (no cert-manager).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-controller-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  sources:
+    - repoURL: "https://uffizzicloud.github.io/uffizzi_controller"  # <-- verify
+      chart: uffizzi-controller
+      targetRevision: "2.4.6"    # <-- verify latest
+      helm:
+        valueFiles:
+          - $values/environments/staging/controller-values.yaml
+    - repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: eph-env
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

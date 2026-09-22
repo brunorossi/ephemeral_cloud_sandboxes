@@ -1,0 +1,30 @@
+# =============================================================================
+# ROOT APPLICATION (app-of-apps) — DEV
+# =============================================================================
+# Watches apps/dev/ and creates one child Application per component.
+# Applied into the EXISTING argocd namespace.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-root-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  source:
+    repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    targetRevision: main
+    path: apps/dev
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,18 @@
+# =============================================================================
+# VALUES: uffizzi-cluster-operator — DEV
+# =============================================================================
+# Single-node K3s: no node placement/labels needed (all vclusters land on the
+# one node). Leave defaults unless the chart requires explicit values.
+#
+# The floci-aws / floci-azure resource profiles are NOT set here; they are
+# applied per-vcluster via environments/dev/templates/*.yaml.
+# =============================================================================
+
+# Example knobs (adapt to the chart's actual schema; verify with `helm show values`):
+# replicaCount: 1
+# image:
+#   repository: uffizzi/cluster-operator
+#   tag: ""            # <-- pin
+# resources: {}
+
+{}

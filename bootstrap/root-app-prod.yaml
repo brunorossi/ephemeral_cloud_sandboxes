@@ -1,0 +1,31 @@
+# =============================================================================
+# ROOT APPLICATION (app-of-apps) — PROD
+# =============================================================================
+# NOTE: prod uses MANUAL sync (no automated block) so deploys are approved in the
+# ArgoCD UI. Enable automated sync only when you are confident.
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-root-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  source:
+    repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    targetRevision: main
+    path: apps/prod
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    # Manual sync for prod: uncomment 'automated' to enable auto-sync.
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

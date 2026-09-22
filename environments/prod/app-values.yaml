@@ -1,0 +1,41 @@
+# =============================================================================
+# VALUES: uffizzi-app (API) — DEV (HTTP-only)
+# =============================================================================
+# Secrets (DB, Redis, controller creds, first user) come from SealedSecrets in
+# environments/dev/sealed-secrets/. Do NOT put plaintext credentials here.
+# Confirm exact keys with `helm show values uffizzi-app/uffizzi-app`.
+# =============================================================================
+
+uffizzi:
+  firstUser:
+    email: "admin@floci.prod.local"      # <-- first admin (password via secret)
+    projectName: default
+  controller:
+    username: uffizzi-controller
+    # password: <from SealedSecret>     # MUST match controller-values credentials
+  env: production
+  app_url: http://api.prod.local          # HTTP (no TLS)
+  webHostname: api.prod.local
+  image: uffizzi/app
+  web-replicas: 3                        # prod: HA
+  sidekiq-replicas: 2
+  # In-cluster controller service in eph-env:
+  controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
+  managed_dns_zone_dns_name: prod.local   # ephemeral env DNS zone (local)
+  # Minimal OSS setup: keep premium/integration features off
+  feature_email_delivery: false
+  feature_sentry: false
+  feature_stripe: false
+  feature_google_maps: false
+  feature_mailchimp: false
+
+# Ingress: K3s Traefik, HTTP-only. If the chart does not render an Ingress
+# natively, create one under environments/dev/ with:
+#   ingressClassName: traefik   (no TLS block)
+
+# Dependencies (dev: in-cluster). Credentials injected via SealedSecret-provided
+# Secret; reference it per the chart's existingSecret mechanism where available.
+postgresql:
+  enabled: true
+redis:
+  enabled: true

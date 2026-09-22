@@ -1,0 +1,27 @@
+# =============================================================================
+# ROOT APPLICATION (app-of-apps) — STAGING
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uffizzi-root-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: uffizzi
+  source:
+    repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    targetRevision: main
+    path: apps/staging
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

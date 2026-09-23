@@ -15,4 +15,26 @@
 #   tag: ""            # <-- pin
 # resources: {}
 
-{}
+# -----------------------------------------------------------------------------
+# Flux subchart image override
+# -----------------------------------------------------------------------------
+# The bundled Bitnami `flux` subchart defaults to docker.io/bitnami/fluxcd-*
+# images. Broadcom's late-2025 "Bitnami Secure Images" migration deleted the
+# old public tags from Docker Hub, so those pulls now fail with "not found".
+# Point Flux at the upstream, public fluxcd images on ghcr.io instead.
+# Verified via: helm template ... | grep 'image:.*flux'
+global:
+  security:
+    # Required: non-Bitnami images bypass Bitnami common's image verification.
+    allowInsecureImages: true
+flux:
+  helmController:
+    image:
+      registry: ghcr.io
+      repository: fluxcd/helm-controller
+      tag: v1.3.0        # <-- verify against a version compatible with the operator
+  sourceController:
+    image:
+      registry: ghcr.io
+      repository: fluxcd/source-controller
+      tag: v1.6.2        # <-- verify

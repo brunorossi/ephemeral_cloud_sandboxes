@@ -1,0 +1,54 @@
+# Default values for uffizzi-cluster-operator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: docker.io/uffizzi/uffizzi-cluster-operator
+  tag: v1.6.5
+manager:
+  concurrent: 5
+# `flux` dependency values
+#
+# VENDORED PATCH: the bundled Bitnami `flux` subchart defaults to
+# docker.io/bitnami/fluxcd-* images. Broadcom's late-2025 "Bitnami Secure
+# Images" migration deleted those public tags (image "not found"). Repoint the
+# enabled Flux controllers at the public upstream fluxcd images on ghcr.io.
+# `global.security.allowInsecureImages` is required because non-Bitnami images
+# bypass Bitnami common's image verification. Baked in here (not via ArgoCD
+# $values) so the render is self-contained. See charts/README.md.
+global:
+  security:
+    allowInsecureImages: true
+flux:
+  helmController:
+    enabled: true
+    image:
+      registry: ghcr.io
+      repository: fluxcd/helm-controller
+      tag: v1.3.0
+    metrics:
+      enabled: false
+    args:
+      - --watch-all-namespaces
+      - --log-level=info
+      - --metrics-addr=:8080
+      - --health-addr=:9440
+      - --log-encoding=json
+      - --enable-leader-election
+      - --concurrent=20
+  sourceController:
+    enabled: true
+    image:
+      registry: ghcr.io
+      repository: fluxcd/source-controller
+      tag: v1.6.2
+    metrics:
+      enabled: false
+  kustomizeController:
+    enabled: false
+  notificationController:
+    enabled: false
+  imageAutomationController:
+    enabled: false
+  imageReflectorController:
+    enabled: false

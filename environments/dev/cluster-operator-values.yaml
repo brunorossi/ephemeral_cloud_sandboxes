@@ -1,4 +1,12 @@
 # =============================================================================
+# NOTE (no longer wired): as of the chart vendoring, the operator ArgoCD
+# Application references the vendored chart at charts/uffizzi-cluster-operator
+# by `path:` and NOT this file. The Flux ghcr.io image override below is now
+# baked into that chart's values.yaml. This file is kept for reference / future
+# env-specific tuning; to use it again, add a helm.valueFiles entry in
+# apps/<env>/01-uffizzi-cluster-operator.yaml.
+# =============================================================================
+# =============================================================================
 # VALUES: uffizzi-cluster-operator — DEV
 # =============================================================================
 # Single-node K3s: no node placement/labels needed (all vclusters land on the

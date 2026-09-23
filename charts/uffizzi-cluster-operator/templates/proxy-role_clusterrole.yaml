@@ -1,0 +1,20 @@
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+kind: ClusterRole
+metadata:
+  labels: {{ include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: kube-rbac-proxy
+    app.kubernetes.io/part-of: uffizzi
+  name: {{ include "common.names.fullname" . }}-proxy-role
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create

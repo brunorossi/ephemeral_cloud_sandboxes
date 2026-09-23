@@ -1,5 +1,8 @@
 # uffizzi-cluster-operator: manages UffizziCluster CRDs -> vclusters (ephemeral envs).
-# Multi-source: chart from Helm repo + values from this Git repo (ref: values).
+# VENDORED CHART: served from charts/uffizzi-cluster-operator in THIS repo. The
+# upstream 1.6.5 chart hardcodes a retired gcr.io/kubebuilder/kube-rbac-proxy
+# image (no Helm override) and pulls deleted Bitnami fluxcd-* images; the
+# vendored copy patches both. See charts/README.md.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -11,16 +14,13 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: uffizzi
-  sources:
-    - repoURL: "https://uffizzicloud.github.io/uffizzi-cluster-operator"
-      chart: uffizzi-cluster-operator
-      targetRevision: "1.6.5"
-      helm:
-        valueFiles:
-          - $values/environments/dev/cluster-operator-values.yaml
-    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"
-      targetRevision: main
-      ref: values
+  source:
+    repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+    targetRevision: main
+    path: charts/uffizzi-cluster-operator
+    # No external valueFiles needed: the image fixes (ghcr.io fluxcd + quay.io
+    # kube-rbac-proxy) are baked into the vendored chart's own values.yaml.
+    # Add a `helm.values`/`valueFiles` block here only for env-specific tuning.
   destination:
     server: https://kubernetes.default.svc
     namespace: eph-env

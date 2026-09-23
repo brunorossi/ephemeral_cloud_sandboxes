@@ -23,7 +23,7 @@ image: uffizzi/controller:latest # <-- pin an exact tag
 env: "production"
 sandbox: "false"
 podCidr: 10.42.0.0/16            # K3s default pod CIDR (verify on the node)
-
+s
 # Controller <-> app shared credentials come from a SealedSecret (see
 # environments/dev/sealed-secrets/). These MUST match uffizzi.controller.* in
 # app-values.yaml. Do NOT put plaintext credentials here.

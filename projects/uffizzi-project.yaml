@@ -12,12 +12,11 @@ spec:
   description: Uffizzi self-hosted (app-of-apps) on single-node K3s + Traefik (HTTP-only)
   sourceRepos:
     # This GitOps repo
-    - "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
-    # Helm repositories used by child Applications (verify exact URLs on install)
-    - "https://uffizzicloud.github.io/uffizzi_app"
-    - "https://uffizzicloud.github.io/uffizzi_controller"
+    - "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   
+    - "https://uffizzicloud.github.io/uffizzi"
+    - "https://uffizzicloud.github.io/uffizzi_controller/" 
     - "https://uffizzicloud.github.io/uffizzi-cluster-operator"
-    - "https://bitnami-labs.github.io/sealed-secrets"
+    - "https://bitnami.github.io/sealed-secrets"
   destinations:
     - namespace: argocd
       server: https://kubernetes.default.svc

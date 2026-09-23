@@ -11,7 +11,7 @@ metadata:
 spec:
   project: uffizzi
   source:
-    repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
     targetRevision: main
     path: apps/staging
     directory:

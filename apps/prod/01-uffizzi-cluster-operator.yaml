@@ -12,13 +12,13 @@ metadata:
 spec:
   project: uffizzi
   sources:
-    - repoURL: "https://uffizzicloud.github.io/uffizzi-cluster-operator"  # <-- verify
+    - repoURL: "https://uffizzicloud.github.io/uffizzi-cluster-operator"
       chart: uffizzi-cluster-operator
-      targetRevision: "*"        # <-- pin exact version
+      targetRevision: "1.6.5"
       helm:
         valueFiles:
           - $values/environments/prod/cluster-operator-values.yaml
-    - repoURL: "https://github.com/<ORG>/uffizzi-floci.git"   # <-- REPLACE
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
       targetRevision: main
       ref: values
   destination:

@@ -88,6 +88,43 @@ kubectl get crd | grep uffizzicluster
 ```
 - If absent, the cluster-operator app hasn't synced/installed CRDs yet. Sync it.
 
+### Operator pod `ErrImagePull` / `ImagePullBackOff` on upstream images
+Two known dead upstream image references affect the cluster-operator:
+
+1. **Flux images (`docker.io/bitnami/fluxcd-*`)** — Broadcom's late-2025 "Bitnami
+   Secure Images" migration deleted the old public tags. **Fixed in-repo** by
+   `environments/<env>/cluster-operator-values.yaml`, which repoints the bundled
+   Flux subchart at the public upstream images on `ghcr.io/fluxcd/*` (plus
+   `global.security.allowInsecureImages: true`). No action needed unless you see
+   a `bitnami/fluxcd-*` pull error — then confirm those values are synced.
+
+2. **`gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1`** — Google retired the
+   `gcr.io/kubebuilder` distribution. This image is **hardcoded** in the operator
+   chart's Deployment template with **no Helm value to override it**, so it cannot
+   be fixed via a values file. The upstream image lives at
+   `quay.io/brancz/kube-rbac-proxy:v0.13.1`.
+
+   Fix via node-level containerd rewrite (see
+   [`scripts/k3s-registry-rewrite.sh`](../scripts/k3s-registry-rewrite.sh)). Run it
+   **on the K3s node** (not from a workstation):
+   ```bash
+   # Preview what it will do (safe, changes nothing):
+   DRY_RUN=true ./scripts/k3s-registry-rewrite.sh
+
+   # Apply: writes /etc/rancher/k3s/registries.yaml, restarts k3s, re-pulls:
+   sudo ./scripts/k3s-registry-rewrite.sh
+   ```
+   > This is **node-level config, outside GitOps** — re-apply it if the node is
+   > rebuilt (ideally bake it into node provisioning). If `registries.yaml` already
+   > defines a `mirrors:` block, merge manually (YAML forbids duplicate keys); the
+   > script warns and backs up the original before appending.
+
+   Verify:
+   ```bash
+   kubectl -n eph-env get pods | grep cluster-operator
+   kubectl -n eph-env describe pod <operator-pod> | grep -i image
+   ```
+
 ### floci emulator / DinD sidecar not starting
 The vcluster runs a 2-container pod (`floci` + `dind`) in its `default` namespace.
 Get a kubeconfig for the vcluster first (`uffizzi cluster kubeconfig dev-<username>`),

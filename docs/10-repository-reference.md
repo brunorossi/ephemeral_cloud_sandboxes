@@ -46,6 +46,11 @@ uffizzi-floci/
     │   └── templates/
     │       ├── floci-aws.yaml                # AWS emulator (floci/floci:4566) + DinD sidecar
     │       └── floci-azure.yaml              # Azure emulator (floci/floci-az:4577, TLS) + DinD sidecar
+├── charts/                            # Vendored Helm charts (patched)
+│   ├── README.md                      # why vendored + re-vendoring steps
+│   └── uffizzi-cluster-operator/      # patched operator chart (image fixes)
+├── scripts/
+│   └── seal-secrets.sh               # generate SealedSecrets from env vars
 └── .kiro/specs/uffizzi-floci/         # Formal spec (requirements/design/tasks)
 ```
 
@@ -72,8 +77,12 @@ uffizzi-floci/
 
 ### `apps/<env>/`
 Each file is an ArgoCD `Application`. Numeric prefix hints the intended order and maps
-to a `sync-wave`. Multi-source Applications pull the chart from a Helm repo and values
-from this Git repo (`ref: values`). All deploy into `eph-env`.
+to a `sync-wave`. Most Applications are multi-source (chart from a Helm repo, values
+from this Git repo via `ref: values`). **`01-uffizzi-cluster-operator.yaml` is the
+exception:** it is single-source and points at the **vendored chart** at
+`charts/uffizzi-cluster-operator` (`path:`), because the upstream chart ships broken
+image references that values cannot override (see [`charts/README.md`](../charts/README.md)).
+All deploy into `eph-env`.
 
 ### `environments/<env>/`
 | File/Dir | Purpose |
@@ -89,6 +98,12 @@ from this Git repo (`ref: values`). All deploy into `eph-env`.
 | File | Purpose |
 |---|---|
 | `seal-secrets.sh` | Generates the four required SealedSecrets from env vars via `kubeseal` |
+
+### `charts/`
+| File/Dir | Purpose |
+|---|---|
+| `README.md` | Why charts are vendored and how to re-vendor on upgrade |
+| `uffizzi-cluster-operator/` | Vendored operator chart (1.6.5) patched to fix retired `gcr.io/kubebuilder/kube-rbac-proxy` and deleted `bitnami/fluxcd-*` images |
 
 ### `.kiro/specs/uffizzi-floci/`
 | File | Purpose |

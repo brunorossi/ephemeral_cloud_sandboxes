@@ -42,16 +42,20 @@ ArgoCD (pre-installed, ns: argocd)
   component.
 - **sync-wave** annotations guarantee ordering: Sealed Secrets first (so other
   components' secrets can be decrypted), then operator, controller, app, templates.
-- Child Applications use **ArgoCD multi-source**: the Helm chart comes from the
-  upstream Helm repo, while the values file is read from this Git repo via a
-  `ref: values` source.
+- Child Applications generally use **ArgoCD multi-source**: the Helm chart comes from
+  the upstream Helm repo, while the values file is read from this Git repo via a
+  `ref: values` source. **Exception:** `uffizzi-cluster-operator` is served from a
+  **vendored chart** in this repo (`charts/uffizzi-cluster-operator`, single-source
+  `path:`) because the upstream chart ships broken image references that cannot be
+  overridden via values — see [Repository reference](10-repository-reference.md) and
+  [`charts/README.md`](../charts/README.md).
 
 ## Components
 
 | Component | Kind | Purpose |
 |---|---|---|
 | Sealed Secrets controller | Helm release | Decrypts `SealedSecret` → `Secret` in `eph-env` |
-| uffizzi-cluster-operator | Helm release | Reconciles `UffizziCluster` CRs into vclusters |
+| uffizzi-cluster-operator | Helm release (vendored chart) | Reconciles `UffizziCluster` CRs into vclusters |
 | uffizzi-controller | Helm release | Proxies Uffizzi API calls to the Kubernetes API |
 | uffizzi-app | Helm release | REST API (Rails) + Sidekiq workers; CLI endpoint |
 | PostgreSQL | subchart | Primary datastore for uffizzi-app |

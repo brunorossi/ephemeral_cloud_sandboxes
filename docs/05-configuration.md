@@ -69,8 +69,15 @@ HTTP-only is enforced here:
 
 ## cluster-operator values (`cluster-operator-values.yaml`)
 
-Defaults are fine on a single node. Pin the image tag and chart version. No node
-selectors/labels are used (single node).
+> **Note:** `uffizzi-cluster-operator` is deployed from the **vendored chart** at
+> `charts/uffizzi-cluster-operator` (its `apps/<env>/01-uffizzi-cluster-operator.yaml`
+> Application uses a single `path:` source, **not** this values file). The image
+> fixes (ghcr.io Flux images + quay.io kube-rbac-proxy) are baked into the vendored
+> chart's own `values.yaml`. This file is retained for reference / future
+> env-specific tuning; to use it again, add a `helm.valueFiles` entry to the
+> operator Application. See [`charts/README.md`](../charts/README.md).
+
+Defaults are fine on a single node. No node selectors/labels are used (single node).
 
 ## Resource templates (`templates/floci-*.yaml`)
 

@@ -89,41 +89,41 @@ kubectl get crd | grep uffizzicluster
 - If absent, the cluster-operator app hasn't synced/installed CRDs yet. Sync it.
 
 ### Operator pod `ErrImagePull` / `ImagePullBackOff` on upstream images
-Two known dead upstream image references affect the cluster-operator:
+Two known dead upstream image references affect the cluster-operator. **Both are
+fixed by the vendored chart** at `charts/uffizzi-cluster-operator` (see
+[`charts/README.md`](../charts/README.md)); the ArgoCD Applications
+(`apps/<env>/01-uffizzi-cluster-operator.yaml`) point at that local chart path.
 
 1. **Flux images (`docker.io/bitnami/fluxcd-*`)** — Broadcom's late-2025 "Bitnami
-   Secure Images" migration deleted the old public tags. **Fixed in-repo** by
-   `environments/<env>/cluster-operator-values.yaml`, which repoints the bundled
-   Flux subchart at the public upstream images on `ghcr.io/fluxcd/*` (plus
-   `global.security.allowInsecureImages: true`). No action needed unless you see
-   a `bitnami/fluxcd-*` pull error — then confirm those values are synced.
+   Secure Images" migration deleted the old public tags. The vendored chart's
+   `values.yaml` repoints the bundled Flux subchart at the public upstream images
+   on `ghcr.io/fluxcd/*` (plus `global.security.allowInsecureImages: true`).
 
 2. **`gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1`** — Google retired the
    `gcr.io/kubebuilder` distribution. This image is **hardcoded** in the operator
-   chart's Deployment template with **no Helm value to override it**, so it cannot
-   be fixed via a values file. The upstream image lives at
+   chart's Deployment template with **no Helm value to override it**, so it is
+   patched directly in the vendored template to
    `quay.io/brancz/kube-rbac-proxy:v0.13.1`.
 
-   Fix via node-level containerd rewrite (see
-   [`scripts/k3s-registry-rewrite.sh`](../scripts/k3s-registry-rewrite.sh)). Run it
-   **on the K3s node** (not from a workstation):
-   ```bash
-   # Preview what it will do (safe, changes nothing):
-   DRY_RUN=true ./scripts/k3s-registry-rewrite.sh
-
-   # Apply: writes /etc/rancher/k3s/registries.yaml, restarts k3s, re-pulls:
-   sudo ./scripts/k3s-registry-rewrite.sh
-   ```
-   > This is **node-level config, outside GitOps** — re-apply it if the node is
-   > rebuilt (ideally bake it into node provisioning). If `registries.yaml` already
-   > defines a `mirrors:` block, merge manually (YAML forbids duplicate keys); the
-   > script warns and backs up the original before appending.
-
-   Verify:
-   ```bash
-   kubectl -n eph-env get pods | grep cluster-operator
-   kubectl -n eph-env describe pod <operator-pod> | grep -i image
-   ```
+If you still see either dead image being pulled:
+- Confirm the operator app renders the vendored chart (not the upstream Helm
+  repo) and has synced the latest commit:
+  ```bash
+  argocd app get uffizzi-cluster-operator-dev | grep -iE 'Sync|Revision|Health'
+  argocd app manifests uffizzi-cluster-operator-dev \
+    | grep -E '^\s*image:' | sort -u   # expect ghcr.io/fluxcd + quay.io/brancz
+  ```
+- Old ReplicaSets stuck on the dead image won't roll on their own — delete the
+  pods so they recreate with the corrected spec:
+  ```bash
+  kubectl -n eph-env delete pod -l app.kubernetes.io/name=source-controller
+  kubectl -n eph-env delete pod -l app.kubernetes.io/component=kube-rbac-proxy
+  ```
+- Verify:
+  ```bash
+  kubectl -n eph-env get pods | grep cluster-operator
+  kubectl -n eph-env describe pod <operator-pod> | grep -i image
+  ```
 
 ### floci emulator / DinD sidecar not starting
 The vcluster runs a 2-container pod (`floci` + `dind`) in its `default` namespace.

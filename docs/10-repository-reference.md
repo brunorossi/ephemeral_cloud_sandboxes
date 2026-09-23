@@ -34,8 +34,13 @@ uffizzi-floci/
 │   │   ├── 00-sealed-secrets.yaml            # sync-wave -3
 │   │   ├── 01-uffizzi-cluster-operator.yaml  # sync-wave -1
 │   │   ├── 02-uffizzi-controller.yaml        # sync-wave  0 (HTTP-only)
-│   │   ├── 03-uffizzi-app.yaml               # sync-wave  1
-│   │   └── 04-floci-templates.yaml           # sync-wave  2 (manual sync)
+│   │   └── 03-uffizzi-app.yaml               # sync-wave  1
+│   │   # NOTE: no floci-templates Application. The floci-aws/floci-azure
+│   │   # presets under environments/<env>/templates/ contain <username>
+│   │   # placeholders and are NOT managed by ArgoCD (a literal "<username>"
+│   │   # name is not a valid RFC 1123 object name). Create per-developer
+│   │   # vclusters via the Uffizzi CLI or by sed-substituting <username> and
+│   │   # applying a copy. See docs/07-developer-guide.md.
 └── environments/                     # Helm values + presets + secrets, per environment
     ├── dev/ | staging/ | prod/
     │   ├── app-values.yaml                   # uffizzi-app values

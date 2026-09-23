@@ -33,15 +33,17 @@ ArgoCD (pre-installed, ns: argocd)
          ├─ 00-sealed-secrets            sync-wave -3   → ns eph-env
          ├─ 01-uffizzi-cluster-operator  sync-wave -1   → ns eph-env
          ├─ 02-uffizzi-controller        sync-wave  0   → ns eph-env
-         ├─ 03-uffizzi-app               sync-wave  1   → ns eph-env
-         └─ 04-floci-templates           sync-wave  2   → ns eph-env (manual sync)
+         └─ 03-uffizzi-app               sync-wave  1   → ns eph-env
+         # (no floci-templates Application: the floci-aws/floci-azure presets
+         #  contain <username> placeholders and are created per-developer via
+         #  the Uffizzi CLI / sed-substitution, not managed by ArgoCD.)
 ```
 
 - **Root Application** points at `apps/<env>` with `directory.recurse: true`, so every
   Application YAML there becomes a managed child. Add/remove a file → add/remove a
   component.
 - **sync-wave** annotations guarantee ordering: Sealed Secrets first (so other
-  components' secrets can be decrypted), then operator, controller, app, templates.
+  components' secrets can be decrypted), then operator, controller, app.
 - Child Applications generally use **ArgoCD multi-source**: the Helm chart comes from
   the upstream Helm repo, while the values file is read from this Git repo via a
   `ref: values` source. **Exception:** `uffizzi-cluster-operator` is served from a

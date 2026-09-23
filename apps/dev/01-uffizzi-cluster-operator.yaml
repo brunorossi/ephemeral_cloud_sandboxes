@@ -15,7 +15,7 @@ metadata:
 spec:
   project: uffizzi
   source:
-    repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+    repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"  
     targetRevision: main
     path: charts/uffizzi-cluster-operator
     # No external valueFiles needed: the image fixes (ghcr.io fluxcd + quay.io

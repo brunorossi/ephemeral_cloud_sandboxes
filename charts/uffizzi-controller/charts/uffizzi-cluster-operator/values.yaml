@@ -1,0 +1,35 @@
+# Default values for uffizzi-cluster-operator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: docker.io/uffizzi/uffizzi-cluster-operator
+  tag: v1.6.5
+manager:
+  concurrent: 5
+# `flux` dependency values
+flux:
+  helmController:
+    enabled: true
+    metrics:
+      enabled: false
+    args:
+      - --watch-all-namespaces
+      - --log-level=info
+      - --metrics-addr=:8080
+      - --health-addr=:9440
+      - --log-encoding=json
+      - --enable-leader-election
+      - --concurrent=20
+  sourceController:
+    enabled: true
+    metrics:
+      enabled: false
+  kustomizeController:
+    enabled: false
+  notificationController:
+    enabled: false
+  imageAutomationController:
+    enabled: false
+  imageReflectorController:
+    enabled: false

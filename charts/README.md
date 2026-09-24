@@ -80,6 +80,62 @@ find charts/uffizzi-app -name '*.tgz' -delete
 #   charts/uffizzi-app/charts/uffizzi-controller/Chart.yaml
 ```
 
+## uffizzi-controller (vendored from 2.4.6)
+
+**Why vendored:** the upstream `uffizzi-controller` chart embeds
+`uffizzi-cluster-operator 1.6.5` (→ `flux`) as a dependency **with no
+`condition:`**, so it cannot be disabled via a values file
+(`--set uffizzi-cluster-operator.enabled=false` is ignored). Because we already
+deploy the operator separately via `apps/<env>/01-uffizzi-cluster-operator.yaml`,
+the embedded operator is redundant and its Flux resources collide with the
+standalone operator's, producing an ArgoCD `RepeatedResourceWarning`:
+
+```
+Resource rbac.authorization.k8s.io/ClusterRole//uffizzi-controller-<env>-flux-eph-env-source-controller-gitreposi
+appeared 2 times among application resources.
+```
+
+**Patches applied to the vendored copy:**
+
+| File | Change |
+|---|---|
+| `Chart.yaml` | Added `condition: uffizzi-cluster-operator.enabled` to the embedded `uffizzi-cluster-operator` dependency so it can be disabled |
+| (all `Chart.lock` files) | Deleted, so ArgoCD renders the unpacked subchart dirs directly and never re-pulls stock flux |
+
+**Values applied per environment (`environments/<env>/controller-values.yaml`):**
+
+```yaml
+# disable the redundant embedded operator (removes the duplicate Flux resources)
+uffizzi-cluster-operator:
+  enabled: false
+```
+
+The `apps/<env>/02-uffizzi-controller.yaml` Application references the vendored
+chart by `path: charts/uffizzi-controller` (multi-source, with values via
+`$values`).
+
+**Verify (the duplicated Flux ClusterRole should no longer be rendered):**
+```bash
+helm template uc charts/uffizzi-controller -f environments/dev/controller-values.yaml \
+  | grep -c 'flux.*source-controller-gitreposi'
+# 0 = embedded operator disabled; standalone operator is the sole owner
+```
+
+**Re-vendoring on upgrade:** re-pull the chart untarred, delete all `Chart.lock`
+files and any `*.tgz` under `charts/`, then re-add the `condition:` line:
+```bash
+helm pull uffizzi-controller/uffizzi-controller --version <NEW> --untar --untardir /tmp/uc
+# copy to charts/uffizzi-controller, then:
+find charts/uffizzi-controller -name Chart.lock -delete
+find charts/uffizzi-controller -name '*.tgz' -delete
+# re-add: condition: uffizzi-cluster-operator.enabled  in
+#   charts/uffizzi-controller/Chart.yaml
+```
+
+> Once upstream adds a `condition:` (or a values toggle) for the embedded
+> operator, this vendored copy can be removed and the Applications repointed at
+> the upstream Helm repo.
+
 ## uffizzi-cluster-operator (vendored from 1.6.5)
 
 **Why vendored:** the upstream chart cannot be fixed with a values file for two

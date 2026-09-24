@@ -1,5 +1,10 @@
 # uffizzi-controller: smart proxy between the Uffizzi API and the Kubernetes API.
-# Multi-source: chart + values from this Git repo. HTTP-only (no cert-manager).
+# VENDORED CHART: served from charts/uffizzi-controller in THIS repo. The upstream
+# uffizzi-controller 2.4.6 embeds uffizzi-cluster-operator 1.6.5 -> flux with no
+# `condition` to disable it, so its Flux ClusterRoles collide with the standalone
+# operator (apps/prod/01-uffizzi-cluster-operator.yaml) -> ArgoCD
+# RepeatedResourceWarning. The vendored copy adds the `condition` so the embedded
+# operator can be turned off via controller-values.yaml. See charts/README.md.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,13 +17,13 @@ metadata:
 spec:
   project: uffizzi
   sources:
-    - repoURL: "https://uffizzicloud.github.io/uffizzi_controller/" 
-      chart: uffizzi-controller
-      targetRevision: "2.4.6" 
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"
+      targetRevision: main
+      path: charts/uffizzi-controller
       helm:
         valueFiles:
           - $values/environments/prod/controller-values.yaml
-    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"
       targetRevision: main
       ref: values
   destination:

@@ -1,0 +1,16 @@
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+kind: RoleBinding
+metadata:
+  labels: {{ include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: uffizzi
+  name: {{ include "common.names.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "common.names.fullname" . }}-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "common.names.fullname" . }}-controller-manager
+  namespace: {{ .Release.Namespace | quote }}

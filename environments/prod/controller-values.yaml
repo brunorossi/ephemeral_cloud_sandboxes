@@ -24,6 +24,19 @@ env: "production"
 sandbox: "false"
 podCidr: 10.42.0.0/16            # K3s default pod CIDR (verify on the node)
 
+# ---------------------------------------------------------------------------
+# VENDORED-CHART PATCH (see charts/uffizzi-controller + charts/README.md)
+# The uffizzi-controller chart embeds uffizzi-cluster-operator 1.6.5 -> flux.
+# We already run a separately patched uffizzi-cluster-operator 1.6.5 via
+# apps/<env>/01-uffizzi-cluster-operator.yaml, so the embedded operator is
+# redundant and its Flux ClusterRoles collide with the standalone operator
+# (ArgoCD RepeatedResourceWarning on
+# .../flux-eph-env-source-controller-gitreposi). Disable it here (requires the
+# `condition` added to the vendored uffizzi-controller/Chart.yaml).
+# ---------------------------------------------------------------------------
+uffizzi-cluster-operator:
+  enabled: false
+
 # Controller <-> app shared credentials come from a SealedSecret (see
 # environments/dev/sealed-secrets/). These MUST match uffizzi.controller.* in
 # app-values.yaml. Do NOT put plaintext credentials here.

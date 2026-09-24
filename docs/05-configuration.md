@@ -1,7 +1,9 @@
 # 05 — Configuration
 
-All configuration lives in Git. Charts come from upstream Helm repos; their values and
-your presets live in this repo.
+All configuration lives in Git. The `uffizzi-cluster-operator`, `uffizzi-controller`,
+and `uffizzi-app` charts are **vendored** under `charts/` (patched for broken images,
+HTTP-only/Traefik, and sealed credentials — see [`charts/README.md`](../charts/README.md));
+their values and your presets live in this repo.
 
 ## Layout recap
 
@@ -36,35 +38,58 @@ grep -rnE "<ORG>|<username>|<-- verify|\.local" --include='*.yaml' .
 | Setting | dev | staging | prod |
 |---|---|---|---|
 | API host | `api.dev.local` | `api.staging.local` | `api.prod.local` |
-| uffizzi-app `web-replicas` | 1 | 1 | 3 |
-| uffizzi-app `sidekiq-replicas` | 1 | 1 | 2 |
+| uffizzi-app `web_replicas` | 1 | 1 | 2 |
+| uffizzi-app `sidekiq_replicas` | 1 | 1 | 2 |
 | Root app sync | automated | automated | **manual** |
 | DB/Redis | in-cluster subcharts | in-cluster | in-cluster (consider managed) |
 
 ## uffizzi-app values (`app-values.yaml`)
 
-Key fields:
-- `uffizzi.app_url` / `uffizzi.webHostname` — the HTTP API endpoint.
-- `uffizzi.controller_url` — in-cluster controller service in `eph-env`.
-- `uffizzi.controller.username` — must match `controller-values.yaml` + the
-  `uffizzi-controller` SealedSecret.
-- `uffizzi.firstUser.email` — first admin (password comes from a SealedSecret).
-- `feature_*` flags — kept `false` for a minimal OSS setup.
-- `postgresql.enabled` / `redis.enabled` — `true` for in-cluster datastores.
+> **Values structure.** This chart reads app config keys at the **top level**
+> (`app_url`, `webHostname`, `ingressClassName`, `controller_url`, `feature_*`,
+> `web_replicas` / `sidekiq_replicas` — note **underscores**), **not** under an
+> `uffizzi:` block. Credentials go under `global.uffizzi.*`. A nested `uffizzi:`
+> block is silently ignored (chart falls back to its `uffizzi.example.com` defaults).
 
-> Passwords are **never** in this file; they come from SealedSecrets. Wire them via
-> the chart's `existingSecret` mechanism (confirm exact keys with
-> `helm show values uffizzi-app/uffizzi-app`).
+Key fields:
+- `app_url` / `webHostname` — the HTTP API endpoint (host used by the web Ingress).
+- `ingressClassName: traefik` — routes the API Ingress through Traefik.
+- `controller_url` / `vcluster_controller_url` — the in-cluster **standalone**
+  controller service in `eph-env`
+  (`http://uffizzi-controller.eph-env.svc.cluster.local:8080`).
+- `global.uffizzi.controller.username` — must match `controller-values.yaml` + the
+  controller env-secret.
+- `global.uffizzi.firstUser.email` — first admin (password arrives via the
+  `uffizzi-web-envs` SealedSecret).
+- `feature_*` flags — kept `false` for a minimal OSS setup.
+- `postgresql.enabled` / `redis.enabled` — `true` for in-cluster datastores; both
+  point at their sealed secret via `existingSecret`.
+- `externalSecret: uffizzi-web-envs` — the sealed app env-secret layered over the
+  chart defaults (see [Secrets](06-secrets.md)).
+- `uffizzi-controller.enabled: false` — disables the redundant embedded controller
+  stack (nginx/cert-manager/duplicate controller); the controller runs standalone.
+
+> Passwords are **never** in this file; they come from SealedSecrets (`uffizzi-web-envs`
+> for the app, `uffizzi-postgres`/`uffizzi-redis` for the datastores). See
+> [Secrets](06-secrets.md).
 
 ## uffizzi-controller values (`controller-values.yaml`)
 
 HTTP-only is enforced here:
+- `ingress.hostname: api.<env>.local` + `ingress.className: traefik` — HTTP host via Traefik.
 - `clusterIssuer: ""` and `certEmail: ""` — no ACME.
-- `cert-manager.enabled: false`, `cert-manager.installCRDs: false` — no cert-manager.
-- `ingress.hostname: api.<env>.local` — HTTP host via Traefik.
+- `cert-manager.enabled: false` — no cert-manager (dependency disabled via the
+  vendored chart's `condition`).
+- `ingress-nginx.enabled: false` — no embedded nginx (floci is Traefik-only).
+- `uffizzi-cluster-operator.enabled: false` — the operator runs standalone
+  (`01-uffizzi-cluster-operator.yaml`); the embedded copy is disabled to avoid
+  duplicate Flux resources.
+- `externalSecret: uffizzi-controller-env` — sealed controller creds layered over
+  the chart defaults (see [Secrets](06-secrets.md)).
 - `podCidr` — set to the K3s pod CIDR (default `10.42.0.0/16`; verify on the node).
 
-> If a chart version defaults to HTTPS or an HTTP→HTTPS redirect, override it here.
+> These embedded-dependency disables require `condition:` lines added in the
+> **vendored** `charts/uffizzi-controller/Chart.yaml` — see [`charts/README.md`](../charts/README.md).
 > Validate the rendered ingress with `helm template` (see [Operations](08-operations.md#validation)).
 
 ## cluster-operator values (`cluster-operator-values.yaml`)
@@ -136,11 +161,15 @@ own Docker/containerd socket is **not** mounted.
 > **ephemeral** (lost on pod restart). Consider dropping the sidecar from `prod`
 > if you don't need Docker-backed services there.
 
-## Pinning chart versions
+## Pinning / upgrading chart versions
 
-Replace `"*"` / `# <-- verify` in `apps/<env>/*.yaml` with explicit versions:
+The `uffizzi-cluster-operator`, `uffizzi-controller`, and `uffizzi-app` charts are
+**vendored** under `charts/`, so there is no `targetRevision` to bump — the version is
+whatever is committed. To move to a newer upstream version, re-vendor and re-apply the
+patches following the per-chart "Re-vendoring on upgrade" steps in
+[`charts/README.md`](../charts/README.md):
 ```bash
 helm repo add uffizzi-app https://uffizzicloud.github.io/uffizzi_app
-helm search repo uffizzi-app --versions | head
+helm search repo uffizzi-app --versions | head   # find the target version
+# then: helm pull ... --untar, copy into charts/, delete Chart.lock/*.tgz, re-apply patches
 ```
-Pin the chosen version in the Application `targetRevision`.

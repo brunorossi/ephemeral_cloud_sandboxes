@@ -44,12 +44,14 @@ ArgoCD (pre-installed, ns: argocd)
   component.
 - **sync-wave** annotations guarantee ordering: Sealed Secrets first (so other
   components' secrets can be decrypted), then operator, controller, app.
-- Child Applications generally use **ArgoCD multi-source**: the Helm chart comes from
-  the upstream Helm repo, while the values file is read from this Git repo via a
-  `ref: values` source. **Exception:** `uffizzi-cluster-operator` is served from a
-  **vendored chart** in this repo (`charts/uffizzi-cluster-operator`, single-source
-  `path:`) because the upstream chart ships broken image references that cannot be
-  overridden via values — see [Repository reference](10-repository-reference.md) and
+- Child Applications read their values file from this Git repo via a `ref: values`
+  source. **All three Uffizzi charts are served from vendored copies in this repo**
+  (`charts/uffizzi-cluster-operator`, `charts/uffizzi-controller`, `charts/uffizzi-app`,
+  referenced by `path:`) because the upstream charts ship broken image references and
+  nginx/cert-manager/TLS defaults that cannot be overridden via values, and embed
+  redundant sub-stacks. `uffizzi-cluster-operator` is single-source (`path:` only);
+  `uffizzi-controller` and `uffizzi-app` are multi-source (`path:` chart + `ref: values`).
+  See [Repository reference](10-repository-reference.md) and
   [`charts/README.md`](../charts/README.md).
 
 ## Components

@@ -6,6 +6,14 @@ dependencies:
 - name: uffizzi-controller
   repository: https://uffizzicloud.github.io/uffizzi_controller/
   version: ^2
+  # VENDORED PATCH: made conditional so the entire embedded controller stack
+  # (its own copy of ingress-nginx + cert-manager + uffizzi-cluster-operator +
+  # a duplicate controller Deployment/Ingress) can be disabled. floci deploys
+  # the controller standalone via apps/<env>/02-uffizzi-controller.yaml and the
+  # API reaches it via controller_url, so this embedded copy is redundant and
+  # off-spec (it renders nginx, not Traefik). Disabled via app-values.yaml
+  # (uffizzi-controller.enabled=false). See charts/README.md.
+  condition: uffizzi-controller.enabled
 - condition: postgresql.enabled
   name: postgresql
   repository: https://charts.bitnami.com/bitnami

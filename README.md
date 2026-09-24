@@ -68,7 +68,7 @@ environments/<env>/
 |---|---|---|
 | `<ORG>` | bootstrap/, projects/, apps/* | your Git org/owner |
 | `*.dev.local` / `*.staging.local` / `*.prod.local` | environments/*, apps/* | real hostnames if any |
-| chart versions marked `# <-- verify` | apps/* | pinned versions |
+| sealed-secrets chart `targetRevision` | apps/*/00-sealed-secrets.yaml | pinned version if you change it (Uffizzi charts are vendored under `charts/`, no version to pin) |
 | resource quota / image tags | environments/*/templates/*.yaml | agreed CPU/memory; pin `floci/floci`, `floci/floci-az`, `docker:*-dind` |
 
 ## Environments

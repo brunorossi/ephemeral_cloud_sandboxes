@@ -23,9 +23,8 @@ Admin/operator tasks for running the platform.
 # YAML sanity
 find . -name '*.yaml' -not -path './.kiro/*' -exec yq e '.' {} \; >/dev/null
 
-# Render a chart with its values and confirm HTTP-only (no TLS block/redirect)
-helm repo add uffizzi-app https://uffizzicloud.github.io/uffizzi_app
-helm template uffizzi-app uffizzi-app/uffizzi-app \
+# Render a vendored chart with its values and confirm HTTP-only (no TLS block/redirect)
+helm template uffizzi-app charts/uffizzi-app \
   -f environments/dev/app-values.yaml | grep -iE 'ingress|tls|https' || true
 
 # Dry-run the vcluster presets
@@ -41,18 +40,23 @@ Because the root app uses `directory.recurse`, GitOps is file-driven:
 
 ## Upgrading a chart
 
+The operator/controller/app charts are **vendored** under `charts/`, so upgrades mean
+**re-vendoring**, not bumping `targetRevision`:
 1. Find the new version:
    ```bash
+   helm repo add uffizzi-app https://uffizzicloud.github.io/uffizzi_app
    helm repo update
    helm search repo uffizzi-app --versions | head
    ```
-2. Bump `targetRevision` in `apps/<env>/03-uffizzi-app.yaml`.
+2. Re-vendor and re-apply the patches per the "Re-vendoring on upgrade" steps in
+   [`charts/README.md`](../charts/README.md) (pull `--untar`, delete `Chart.lock`/`*.tgz`,
+   re-add the `condition:` lines and template patches).
 3. Commit/push (dev/staging auto-sync; prod sync manually).
 4. Watch rollout and verify health.
 
 ## Scaling
 
-- API/workers: edit `web-replicas` / `sidekiq-replicas` in
+- API/workers: edit `web_replicas` / `sidekiq_replicas` in
   `environments/<env>/app-values.yaml`.
 - Per-developer env size: adjust `resourceQuota` in the `floci-*` templates.
 

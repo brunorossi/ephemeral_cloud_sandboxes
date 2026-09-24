@@ -53,7 +53,9 @@ uffizzi-floci/
     │       └── floci-azure.yaml              # Azure emulator (floci/floci-az:4577, TLS) + DinD sidecar
 ├── charts/                            # Vendored Helm charts (patched)
 │   ├── README.md                      # why vendored + re-vendoring steps
-│   └── uffizzi-cluster-operator/      # patched operator chart (image fixes)
+│   ├── uffizzi-cluster-operator/      # patched operator chart (image fixes)
+│   ├── uffizzi-controller/            # patched controller (no nginx/cert-manager; Traefik; sealed creds)
+│   └── uffizzi-app/                   # patched app (embedded controller disabled; Traefik; sealed creds)
 ├── scripts/
 │   └── seal-secrets.sh               # generate SealedSecrets from env vars
 └── .kiro/specs/uffizzi-floci/         # Formal spec (requirements/design/tasks)
@@ -82,18 +84,18 @@ uffizzi-floci/
 
 ### `apps/<env>/`
 Each file is an ArgoCD `Application`. Numeric prefix hints the intended order and maps
-to a `sync-wave`. Most Applications are multi-source (chart from a Helm repo, values
-from this Git repo via `ref: values`). **`01-uffizzi-cluster-operator.yaml` is the
-exception:** it is single-source and points at the **vendored chart** at
-`charts/uffizzi-cluster-operator` (`path:`), because the upstream chart ships broken
-image references that values cannot override (see [`charts/README.md`](../charts/README.md)).
+to a `sync-wave`. **All three Uffizzi charts are served from vendored copies** under
+`charts/` (patched for broken images, HTTP-only/Traefik, and sealed credentials):
+`01-uffizzi-cluster-operator.yaml` is single-source (`path:` only);
+`02-uffizzi-controller.yaml` and `03-uffizzi-app.yaml` are multi-source (`path:` chart
++ values from this Git repo via `ref: values`). See [`charts/README.md`](../charts/README.md).
 All deploy into `eph-env`.
 
 ### `environments/<env>/`
 | File/Dir | Purpose |
 |---|---|
-| `app-values.yaml` | uffizzi-app Helm values (HTTP endpoint, replicas, feature flags) |
-| `controller-values.yaml` | uffizzi-controller values; disables TLS/cert-manager |
+| `app-values.yaml` | uffizzi-app Helm values (HTTP endpoint, replicas, feature flags; embedded controller disabled; sealed `externalSecret`) |
+| `controller-values.yaml` | uffizzi-controller values; HTTP-only, disables cert-manager/ingress-nginx/embedded operator; sealed `externalSecret` |
 | `cluster-operator-values.yaml` | cluster-operator values (defaults on single node) |
 | `sealed-secrets/` | Encrypted `SealedSecret` manifests + a how-to README |
 | `templates/floci-aws.yaml` | `UffizziCluster` preset: AWS emulator (`floci/floci`) + DinD sidecar + Ingress (`floci-aws-<username>.<env>.local`) |
@@ -102,7 +104,7 @@ All deploy into `eph-env`.
 ### `scripts/`
 | File | Purpose |
 |---|---|
-| `seal-secrets.sh` | Generates the four required SealedSecrets from env vars via `kubeseal` |
+| `seal-secrets.sh` | Generates the six required SealedSecrets from env vars via `kubeseal` (`uffizzi-postgres`, `uffizzi-redis`, `uffizzi-controller`, `uffizzi-first-user`, `uffizzi-web-envs`, `uffizzi-controller-env`) |
 
 ### `charts/`
 | File/Dir | Purpose |

@@ -28,6 +28,15 @@ spec:
         - secretRef:
             name: {{ .Release.Name }}-controller-secret-env
             optional: false
+{{- if .Values.externalSecret }}
+        # VENDORED PATCH (floci): layer a sealed/external Secret LAST so its keys
+        # (CONTROLLER_LOGIN / CONTROLLER_PASSWORD) override the chart-generated
+        # controller-secret-env, which otherwise reads Helm-value creds. These MUST
+        # match the app side (uffizzi-web-envs CONTROLLER_PASSWORD). See charts/README.md.
+        - secretRef:
+            name: {{ .Values.externalSecret }}
+            optional: false
+{{- end }}
         env:
           - name: KUBERNETES_NAMESPACE
             valueFrom:

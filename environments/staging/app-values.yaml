@@ -1,59 +1,103 @@
 # =============================================================================
-# VALUES: uffizzi-app (API) — DEV (HTTP-only)
+# VALUES: uffizzi-app (API) — STAGING (HTTP-only)
 # =============================================================================
 # Secrets (DB, Redis, controller creds, first user) come from SealedSecrets in
-# environments/dev/sealed-secrets/. Do NOT put plaintext credentials here.
-# Confirm exact keys with `helm show values uffizzi-app/uffizzi-app`.
+# environments/staging/sealed-secrets/. Do NOT put plaintext credentials here.
+#
+# IMPORTANT: this chart reads app config keys at the TOP LEVEL (env, app_url,
+# webHostname, image, controller_url, feature_*, web_replicas, ...), NOT under an
+# `uffizzi:` block. Credentials live under `global.uffizzi.*`. Replica counts use
+# UNDERSCORES (web_replicas / sidekiq_replicas) because the templates read those
+# (the chart's values.yaml hyphenated defaults are never consumed).
 # =============================================================================
 
-uffizzi:
-  firstUser:
-    email: "admin@floci.staging.local"      # <-- first admin (password via secret)
-    projectName: default
-  controller:
-    username: uffizzi-controller
-    # password: <from SealedSecret>     # MUST match controller-values credentials
-  env: production
-  app_url: http://api.staging.local          # HTTP (no TLS)
-  webHostname: api.staging.local
-  image: uffizzi/app
-  web-replicas: 1                        # dev: single replica
-  sidekiq-replicas: 1
-  # In-cluster controller service in eph-env:
-  controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
-  managed_dns_zone_dns_name: staging.local   # ephemeral env DNS zone (local)
-  # Minimal OSS setup: keep premium/integration features off
-  feature_email_delivery: false
-  feature_sentry: false
-  feature_stripe: false
-  feature_google_maps: false
-  feature_mailchimp: false
+# --- App (Rails API) configuration --------------------------------------------
+env: production
+app_url: http://api.staging.local        # HTTP (no TLS)
+webHostname: api.staging.local           # host for the web-ingress
+ingressClassName: traefik                # route the API Ingress through Traefik
+image: uffizzi/app
+web_replicas: 1
+sidekiq_replicas: 1
+# In-cluster standalone controller service in eph-env (we disable the embedded one):
+controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
+# vcluster_controller_url must ALSO point at the standalone controller — otherwise
+# the chart defaults it to the embedded controller service (uffizzi-app-*-controller),
+# which no longer exists once the embedded uffizzi-controller is disabled.
+vcluster_controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
+managed_dns_zone_dns_name: staging.local # ephemeral env DNS zone (local)
 
-# Ingress: K3s Traefik, HTTP-only. If the chart does not render an Ingress
-# natively, create one under environments/dev/ with:
-#   ingressClassName: traefik   (no TLS block)
+# Minimal OSS setup: keep premium/integration features off
+feature_email_delivery: false
+feature_sentry: false
+feature_stripe: false
+feature_google_maps: false
+feature_mailchimp: false
 
-# Dependencies (dev: in-cluster). Credentials injected via SealedSecret-provided
-# Secret; reference it per the chart's existingSecret mechanism where available.
+# --- Credentials (chart reads these under global.uffizzi.*) --------------------
+# Passwords come from the SealedSecret-provided Secret; keep only non-secret
+# fields here. The controller username MUST match controller-values.yaml.
+global:
+  uffizzi:
+    firstUser:
+      email: "admin@floci.staging.local"
+      projectName: default
+    controller:
+      username: uffizzi-controller
+      # password: <from SealedSecret>
+  # Postgres server credentials come from the sealed `uffizzi-postgres` Secret
+  # (environments/staging/sealed-secrets/uffizzi-postgres.yaml). When
+  # existingSecret is set, Bitnami requires the key names explicitly. Sealed
+  # keys: postgres-password (admin) + password (app user).
+  postgresql:
+    auth:
+      existingSecret: uffizzi-postgres
+      secretKeys:
+        adminPasswordKey: postgres-password
+        userPasswordKey: password
+      username: uffizzi-user
+      database: uffizzi-app
+
+# --- Dependencies --------------------------------------------------------------
 postgresql:
   enabled: true
-  # Bitnami relocated tagged images out of docker.io/bitnami (late-2025 migration);
-  # use the docker.io/bitnamilegacy mirror which still serves these pinned tags.
   image:
     registry: docker.io
     repository: bitnamilegacy/postgresql
     tag: 16.1.0-debian-11-r3
 redis:
   enabled: true
+  # Redis server password from the sealed `uffizzi-redis` Secret (key: redis-password).
+  auth:
+    existingSecret: uffizzi-redis
+    existingSecretPasswordKey: redis-password
   image:
     registry: docker.io
     repository: bitnamilegacy/redis
     tag: 7.2.3-debian-11-r1
 
+# ---------------------------------------------------------------------------
 # VENDORED-CHART PATCH (see charts/uffizzi-app + charts/README.md): disable the
-# redundant embedded uffizzi-cluster-operator 1.4.5 (we run patched 1.6.5 via
-# apps/staging/01-uffizzi-cluster-operator.yaml). Removes the dead flux images
-# and the hardcoded gcr.io/kubebuilder/kube-rbac-proxy.
+# entire embedded uffizzi-controller stack. floci runs the controller standalone
+# via apps/staging/02-uffizzi-controller.yaml (API reaches it via controller_url
+# above) and the operator via apps/staging/01-uffizzi-cluster-operator.yaml. The
+# app chart's embedded copy is a redundant duplicate (controller Deployment/
+# Ingress + ingress-nginx + cert-manager + operator) that renders nginx, not
+# Traefik. Disabling it removes nginx, cert-manager, the dead flux/kube-rbac-proxy
+# images, and the duplicate controller in one move.
+#
+# clusterIssuer is emptied so the app's own web-ingress renders HTTP-only (no
+# cert-manager annotation / TLS block); see the gated templates/web-ingress.yaml.
+# ---------------------------------------------------------------------------
 uffizzi-controller:
-  uffizzi-cluster-operator:
-    enabled: false
+  enabled: false
+  clusterIssuer: ""
+
+# ---------------------------------------------------------------------------
+# PART B (sealed app credentials): external Secret layered LAST in web/sidekiq
+# envFrom so its keys override the chart-generated ones and the ConfigMap. Provide
+# as a SealedSecret with env-var-named keys: DATABASE_PASSWORD, REDIS_URL,
+# CONTROLLER_PASSWORD, VCLUSTER_CONTROLLER_PASSWORD, UFFIZZI_USER_PASSWORD.
+# See environments/staging/sealed-secrets/README.md.
+# ---------------------------------------------------------------------------
+externalSecret: uffizzi-web-envs

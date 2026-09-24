@@ -50,5 +50,9 @@ ingress-nginx:
   enabled: false
 
 # Controller <-> app shared credentials come from a SealedSecret (see
-# environments/dev/sealed-secrets/). These MUST match uffizzi.controller.* in
-# app-values.yaml. Do NOT put plaintext credentials here.
+# environments/dev/sealed-secrets/). These MUST match the app side
+# (uffizzi-web-envs CONTROLLER_PASSWORD). The vendored controller deployment
+# layers `externalSecret` LAST in envFrom, overriding the chart-generated
+# controller-secret-env (which otherwise reads Helm-value creds). Provide it as a
+# SealedSecret with env-var-named keys CONTROLLER_LOGIN / CONTROLLER_PASSWORD.
+externalSecret: uffizzi-controller-env

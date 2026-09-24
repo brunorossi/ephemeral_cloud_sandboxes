@@ -23,6 +23,21 @@ argocd app get uffizzi-app-dev
 - Confirm `sync-wave` annotations are present. Sealed Secrets (`-3`) must be healthy
   before app/controller need their secrets.
 
+### `RepeatedResourceWarning` (duplicate resource across Applications)
+- Symptom: `Resource ...ClusterRole//uffizzi-controller-<env>-flux-...-source-controller-gitreposi
+  appeared 2 times among application resources.`
+- Cause: the upstream `uffizzi-controller` / `uffizzi-app` charts **embed** a copy of
+  `uffizzi-cluster-operator` (→ Flux), colliding with the standalone operator.
+- Fix (already applied in the vendored charts): disable the embedded stacks via
+  `uffizzi-cluster-operator.enabled: false` (controller-values) and
+  `uffizzi-controller.enabled: false` (app-values). See [`charts/README.md`](../charts/README.md).
+
+### `ingress-nginx-controller` pod stuck / `LoadBalancer` Service pending
+- Cause: an embedded `ingress-nginx` (`type: LoadBalancer`) that can't get an IP on
+  single-node K3s and collides with Traefik on ports 80/443.
+- Fix (already applied): `ingress-nginx.enabled: false` in controller-values and the
+  embedded controller disabled in app-values. floci is Traefik-only.
+
 ## Sealed Secrets
 
 ### `Secret` not created from a `SealedSecret`
@@ -42,10 +57,11 @@ kubectl -n eph-env logs deploy/sealed-secrets | tail
 ## uffizzi-app / controller
 
 ### App pod crashloops on startup
-- Usually missing/incorrect secrets. Confirm the four Secrets exist and keys match the
-  chart's expectations:
+- Usually missing/incorrect secrets. Confirm the required Secrets exist and keys match
+  the chart's expectations (note `externalSecret` refs are `optional: false`, so pods
+  won't start until these exist):
 ```bash
-kubectl -n eph-env get secret uffizzi-postgres uffizzi-redis uffizzi-controller uffizzi-first-user
+kubectl -n eph-env get secret uffizzi-postgres uffizzi-redis uffizzi-controller uffizzi-first-user uffizzi-web-envs uffizzi-controller-env
 kubectl -n eph-env logs deploy/uffizzi-app | tail
 ```
 - If the app started before secrets existed:
@@ -56,7 +72,10 @@ kubectl -n eph-env rollout restart deploy
 ### App can't reach the controller
 - Verify `controller_url` in `app-values.yaml` matches the in-cluster service:
   `http://uffizzi-controller.eph-env.svc.cluster.local:8080` (confirm the port).
-- Verify controller credentials match on both sides and in the SealedSecret.
+  Also check `vcluster_controller_url` points at the **standalone** controller (not the
+  disabled embedded `uffizzi-app-<env>-controller`).
+- Verify controller credentials match on both sides: `CONTROLLER_PASSWORD` must be
+  identical in the `uffizzi-web-envs` and `uffizzi-controller-env` SealedSecrets.
 
 ## Ingress / HTTP
 

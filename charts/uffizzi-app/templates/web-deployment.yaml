@@ -34,6 +34,14 @@ spec:
             optional: false
         - configMapRef:
             name: uffizzi-web-service-envs
+{{- if .Values.externalSecret }}
+        # VENDORED PATCH (floci): layer a sealed/external Secret LAST so its keys
+        # override the chart-generated uffizzi-web-secret-envs and the plaintext
+        # UFFIZZI_USER_PASSWORD in uffizzi-web-common-envs. See charts/README.md.
+        - secretRef:
+            name: {{ .Values.externalSecret }}
+            optional: false
+{{- end }}
             optional: false
         imagePullPolicy: Always
         ports:

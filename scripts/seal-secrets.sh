@@ -57,4 +57,24 @@ seal uffizzi-first-user \
   "email=${ADMIN_EMAIL:?}" \
   "password=${ADMIN_PW:?}"
 
+# Consolidated app env-secret consumed by the uffizzi-app web/sidekiq deployments
+# via envFrom (Part B). Keys are named as the Rails ENV VARS the app reads, and
+# override the chart-generated uffizzi-web-secret-envs + the ConfigMap's
+# UFFIZZI_USER_PASSWORD. Reuses the same raw passwords as the secrets above so
+# there is a single source of truth per credential.
+REDIS_HOST="${REDIS_HOST:-uffizzi-app-${ENV}-redis-master}"
+seal uffizzi-web-envs \
+  "DATABASE_PASSWORD=${PG_PW:?}" \
+  "REDIS_URL=redis://:${REDIS_PW:?}@${REDIS_HOST}" \
+  "CONTROLLER_PASSWORD=${CTRL_PW:?}" \
+  "VCLUSTER_CONTROLLER_PASSWORD=${CTRL_PW:?}" \
+  "UFFIZZI_USER_PASSWORD=${ADMIN_PW:?}"
+
+# Controller-side env-secret consumed by the standalone controller deployment via
+# envFrom (Part B). Keys are the controller's ENV VAR names and MUST carry the same
+# CTRL_PW as uffizzi-web-envs.CONTROLLER_PASSWORD so app<->controller auth matches.
+seal uffizzi-controller-env \
+  "CONTROLLER_LOGIN=${CTRL_USER:-uffizzi-controller}" \
+  "CONTROLLER_PASSWORD=${CTRL_PW:?}"
+
 echo "Done. Commit only the SealedSecret YAMLs under ${OUT} (encrypted)."

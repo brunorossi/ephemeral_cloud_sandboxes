@@ -10,10 +10,22 @@ All in namespace `eph-env`:
 
 | SealedSecret name | Keys | Used by |
 |---|---|---|
-| `uffizzi-postgres` | `postgres-password`, `username`, `password`, `database` | uffizzi-app / PostgreSQL |
-| `uffizzi-redis` | `redis-password` | uffizzi-app / Redis |
-| `uffizzi-controller` | `username`, `password` | app ↔ controller auth (must match) |
-| `uffizzi-first-user` | `email`, `password` | first admin user |
+| `uffizzi-postgres` | `postgres-password`, `username`, `password`, `database` | PostgreSQL server (Bitnami `existingSecret`) |
+| `uffizzi-redis` | `redis-password` | Redis server (Bitnami `existingSecret`) |
+| `uffizzi-controller` | `username`, `password` | reference / bookkeeping (app+controller use the env-secrets below) |
+| `uffizzi-first-user` | `email`, `password` | reference / bookkeeping (admin password reaches the app via `uffizzi-web-envs`) |
+| `uffizzi-web-envs` | `DATABASE_PASSWORD`, `REDIS_URL`, `CONTROLLER_PASSWORD`, `VCLUSTER_CONTROLLER_PASSWORD`, `UFFIZZI_USER_PASSWORD` | uffizzi-app web/sidekiq via `envFrom` (overrides chart defaults) |
+| `uffizzi-controller-env` | `CONTROLLER_LOGIN`, `CONTROLLER_PASSWORD` | standalone uffizzi-controller via `envFrom` (overrides chart defaults) |
+
+> **Why the two `*-envs` secrets exist.** The `uffizzi-app` and `uffizzi-controller`
+> charts do **not** expose a generic `existingSecret` hook for their application
+> credentials — they bake them into chart-generated Secrets/ConfigMaps from Helm
+> values. Our vendored charts therefore layer `uffizzi-web-envs` /
+> `uffizzi-controller-env` as the **last `envFrom`** entry on the deployments, whose
+> env-var-named keys override the chart defaults. Only the **Postgres/Redis servers**
+> use the native Bitnami `existingSecret` mechanism (`uffizzi-postgres` /
+> `uffizzi-redis`). `CONTROLLER_PASSWORD` must be identical in `uffizzi-web-envs` and
+> `uffizzi-controller-env` (the helper enforces this by reusing `CTRL_PW`).
 
 ## One-time: fetch the controller certificate
 
@@ -48,7 +60,9 @@ kubectl -n eph-env create secret generic uffizzi-postgres \
 | kubeseal --cert pub-cert.pem -o yaml \
 > environments/dev/sealed-secrets/uffizzi-postgres.yaml
 ```
-Repeat for `uffizzi-redis`, `uffizzi-controller`, `uffizzi-first-user`.
+Repeat for `uffizzi-redis`, `uffizzi-controller`, `uffizzi-first-user`,
+`uffizzi-web-envs`, and `uffizzi-controller-env` (the helper script generates all of
+them; the manual path is tedious for the two consolidated `*-envs` secrets).
 
 ## Commit and deploy
 
@@ -60,18 +74,25 @@ git push
 ArgoCD syncs them; the controller creates the `Secret` objects. Verify:
 ```bash
 kubectl -n eph-env get sealedsecret
-kubectl -n eph-env get secret uffizzi-postgres uffizzi-redis uffizzi-controller uffizzi-first-user
+kubectl -n eph-env get secret uffizzi-postgres uffizzi-redis uffizzi-controller uffizzi-first-user uffizzi-web-envs uffizzi-controller-env
 ```
 
 ## Wiring secrets into the charts
 
-Reference the created `Secret`s from the Helm values via each chart's `existingSecret`
-(or equivalent) mechanism. Confirm the exact value keys with:
-```bash
-helm show values uffizzi-app/uffizzi-app | less
-```
-Keep the `uffizzi-controller` credentials identical between `app-values.yaml`,
-`controller-values.yaml`, and the `uffizzi-controller` SealedSecret.
+The wiring is **already configured** in this repo — you only need to seal the
+secrets with the names/keys above. Specifically:
+
+- **Postgres/Redis servers** consume `uffizzi-postgres` / `uffizzi-redis` via the
+  Bitnami `existingSecret` values in `app-values.yaml`
+  (`global.postgresql.auth.existingSecret` + `secretKeys`, `redis.auth.existingSecret`).
+- **uffizzi-app** (web + sidekiq) consumes `uffizzi-web-envs` via `envFrom`
+  (`externalSecret: uffizzi-web-envs` in `app-values.yaml`), overriding the
+  chart-generated `uffizzi-web-secret-envs` and the ConfigMap admin password.
+- **uffizzi-controller** consumes `uffizzi-controller-env` via `envFrom`
+  (`externalSecret: uffizzi-controller-env` in `controller-values.yaml`).
+
+Keep the `CONTROLLER_PASSWORD` identical between `uffizzi-web-envs` and
+`uffizzi-controller-env` (the helper reuses `CTRL_PW`, so re-seal both together).
 
 ## Rotation
 

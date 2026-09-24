@@ -32,40 +32,87 @@ The embedded operator 1.4.5 pulls images that no longer exist:
    Helm value to override it.
 
 Because we already deploy a separately patched **`uffizzi-cluster-operator`
-1.6.5** via `apps/<env>/01-uffizzi-cluster-operator.yaml`, the embedded 1.4.5
-operator is redundant (and running two operators risks fighting over the same
-Flux CRDs / HelmReleases).
+1.6.5** via `apps/<env>/01-uffizzi-cluster-operator.yaml` **and** the controller
+standalone via `apps/<env>/02-uffizzi-controller.yaml`, the app chart's entire
+embedded `uffizzi-controller` stack is redundant. Left enabled it also renders,
+off-spec for floci:
+
+- a **duplicate controller** Deployment/Service/Ingress (collides by name with
+  the standalone controller in `eph-env`),
+- an embedded **ingress-nginx** (`type: LoadBalancer`, hangs on single-node K3s),
+- an embedded **cert-manager**, and
+- the app's own **`web-ingress.yaml`** hardwired to `kubernetes.io/ingress.class:
+  nginx` with a cert-manager annotation + `tls:` block (the API endpoint the CLI
+  hits — would not be served by Traefik).
+
+So we disable the **whole** embedded controller (a superset of just disabling the
+embedded operator).
 
 **Patches applied to the vendored copy:**
 
 | File | Change |
 |---|---|
-| `charts/uffizzi-controller/Chart.yaml` | Added `condition: uffizzi-cluster-operator.enabled` to the embedded operator dependency so it can be disabled |
+| `charts/uffizzi-app/Chart.yaml` | Added `condition: uffizzi-controller.enabled` to the embedded `uffizzi-controller` dependency so the entire stack can be disabled (the embedded controller's own `Chart.yaml` still carries the `uffizzi-cluster-operator.enabled` condition from before) |
+| `templates/web-ingress.yaml` | Wrapped the `tls:` block and `cert-manager.io/cluster-issuer` annotation in `{{- if (index .Values "uffizzi-controller" "clusterIssuer") }}`; replaced the hardcoded `kubernetes.io/ingress.class: nginx` with `ingressClassName` from `.Values.ingressClassName` |
+| `templates/web-deployment.yaml`, `templates/sidekiq-deployment.yaml` | **(Part B — sealed credentials)** Append an optional `{{- if .Values.externalSecret }}` `secretRef` as the **LAST** `envFrom` entry. Kubernetes lets a later `envFrom` override earlier keys, so a sealed Secret named by `externalSecret` overrides the chart-generated `uffizzi-web-secret-envs` (DB/Redis/controller passwords) **and** the plaintext `UFFIZZI_USER_PASSWORD` in the `uffizzi-web-common-envs` ConfigMap. This is what lets the Rails app run on real sealed credentials without any plaintext in Git |
 | (all `Chart.lock` files) | Deleted, so ArgoCD renders the unpacked subchart dirs directly and never re-pulls stock flux |
+
+**Sealed credentials (Part B):** `environments/<env>/app-values.yaml` sets
+`externalSecret: uffizzi-web-envs`. Provide that Secret as a SealedSecret with
+**env-var-named** keys (`DATABASE_PASSWORD`, `REDIS_URL`, `CONTROLLER_PASSWORD`,
+`VCLUSTER_CONTROLLER_PASSWORD`, `UFFIZZI_USER_PASSWORD`); `scripts/seal-secrets.sh`
+generates it (deriving `REDIS_URL` as
+`redis://:<REDIS_PW>@uffizzi-app-<ENV>-redis-master`). See
+`environments/<env>/sealed-secrets/README.md`. Postgres/Redis **servers**
+separately consume `uffizzi-postgres` / `uffizzi-redis` via the Bitnami
+`existingSecret` values (Part A).
 
 **Values applied per environment (`environments/<env>/app-values.yaml`):**
 
+> **Values structure (important):** this chart reads app config keys at the
+> **top level** (`env`, `app_url`, `webHostname`, `image`, `controller_url`,
+> `vcluster_controller_url`, `managed_dns_zone_dns_name`, `feature_*`, ...), **not**
+> under an `uffizzi:` block. Credentials go under `global.uffizzi.*`. Replica
+> counts use **underscores** (`web_replicas` / `sidekiq_replicas`) — the
+> templates read those; the chart's hyphenated `web-replicas` defaults are never
+> consumed. A nested `uffizzi:` block (an earlier mistake) is silently ignored,
+> leaving the chart on its `uffizzi.example.com` / `web-replicas: 3` defaults.
+
 ```yaml
-# disable the redundant embedded operator (removes flux + kube-rbac-proxy)
-uffizzi-controller:
-  uffizzi-cluster-operator:
-    enabled: false
+# app config at TOP LEVEL, HTTP-only via Traefik
+app_url: http://api.dev.local
+webHostname: api.dev.local
+ingressClassName: traefik
+web_replicas: 1
+# both controller URLs must point at the STANDALONE controller in eph-env,
+# since the embedded controller service no longer exists once disabled
+controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
+vcluster_controller_url: "http://uffizzi-controller.eph-env.svc.cluster.local:8080"
+# credentials under global.uffizzi.* (passwords via SealedSecret)
+global:
+  uffizzi:
+    firstUser: { email: "admin@floci.dev.local", projectName: default }
+    controller: { username: uffizzi-controller }
 # relocate Bitnami DB/cache images to the still-published legacy mirror
 postgresql:
   image: { registry: docker.io, repository: bitnamilegacy/postgresql, tag: 16.1.0-debian-11-r3 }
 redis:
   image: { registry: docker.io, repository: bitnamilegacy/redis, tag: 7.2.3-debian-11-r1 }
+# disable the entire embedded controller stack; empty clusterIssuer -> HTTP-only web-ingress
+uffizzi-controller:
+  enabled: false
+  clusterIssuer: ""
 ```
 
 The `apps/<env>/03-uffizzi-app.yaml` Application references the vendored chart by
 `path: charts/uffizzi-app` (multi-source, with values via `$values`).
 
-**Verify (no dead image references should appear):**
+**Verify (no dead images, no nginx/cert-manager, Traefik HTTP-only ingress):**
 ```bash
 helm template ua charts/uffizzi-app -f environments/dev/app-values.yaml \
-  | grep -E '^\s*image:' \
-  | grep -iE 'bitnami/fluxcd|gcr.io/kubebuilder|docker.io/bitnami/postgresql|docker.io/bitnami/redis'
-# (empty output = clean)
+  | grep -icE 'bitnami/fluxcd|gcr.io/kubebuilder|ingress-nginx-controller|cert-manager.io/v1|ingress.class: nginx|type: LoadBalancer'
+# 0 = clean. The web-ingress should show `ingressClassName: traefik`, host
+#     api.dev.local, and no tls: block.
 ```
 
 **Re-vendoring on upgrade:** re-pull the chart untarred, delete all `Chart.lock`

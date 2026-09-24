@@ -6,17 +6,29 @@ with their own root Application.
 > Assumes the [Prerequisites](03-prerequisites.md) are met and placeholders are
 > replaced.
 
-## Step 1 — Replace placeholders
+## Step 1 — Point the manifests at your Git repo
 
-At minimum, set your Git repo URL everywhere `<ORG>` appears:
+Every ArgoCD `Application` (and the AppProject) references the Git repo that holds this
+config. Out of the box they point at the reference fork
+`https://github.com/brunorossi/ephemeral_cloud_sandboxes.git`. Replace that with your
+own fork's URL everywhere it appears (`bootstrap/`, `apps/`, `projects/`):
 
 ```bash
-grep -rl "<ORG>" . --include='*.yaml' \
-  | xargs sed -i 's#https://github.com/<ORG>/uffizzi-floci.git#https://github.com/YOUR_ORG/uffizzi-floci.git#g'
+OLD='https://github.com/brunorossi/ephemeral_cloud_sandboxes.git'
+NEW='https://github.com/YOUR_ORG/YOUR_REPO.git'
+grep -rl "$OLD" bootstrap apps projects \
+  | xargs sed -i "s#${OLD}#${NEW}#g"
+
+# verify none remain:
+grep -rn 'brunorossi/ephemeral_cloud_sandboxes' bootstrap apps projects || echo "clean"
 ```
 
-Review other placeholders (`*.local` hostnames, chart versions marked `# <-- verify`).
-See [Configuration](05-configuration.md) for the full list.
+> The reference manifests carry a few `# <-- REPLACE` markers, but they are not on
+> every occurrence — rely on the full-string replace above, not on the markers.
+> Review the remaining placeholders (`*.local` hostnames; the `sealed-secrets` chart
+> `targetRevision` in `apps/*/00-sealed-secrets.yaml` if you change it — the Uffizzi
+> charts are vendored, so there is no version to pin). See
+> [Configuration](05-configuration.md) for the full list.
 
 Commit and push so ArgoCD can read the repo.
 
@@ -35,34 +47,43 @@ kubectl apply -f bootstrap/root-app-dev.yaml
 
 ArgoCD now creates the child Applications from `apps/dev/` in sync-wave order.
 
-## Step 4 — Watch the rollout
+> **Expected first-apply state (important).** The SealedSecret *manifests* do not exist
+> in Git yet, so right after this `apply` the `uffizzi-controller-dev` and
+> `uffizzi-app-dev` Applications will sync their manifests but their **pods stay
+> pending** with `secret "uffizzi-controller-env" not found` /
+> `secret "uffizzi-web-envs" not found` (the `envFrom` refs are `optional: false` by
+> design — the platform is credential-driven and fail-closed). **This is not a
+> failure.** Both root and child Applications have `selfHeal: true`, so once you seal
+> the secrets in Step 5 and push, ArgoCD converges the control plane automatically —
+> no re-`apply` needed. Steps 4–6 walk through this in order.
 
-Via CLI:
+## Step 4 — Wait for the Sealed Secrets controller
+
+The child Applications sync in `sync-wave` order: `sealed-secrets` (`-3`) comes up
+first. **Wait for it before creating secrets** — you need its controller running to
+seal against, and the uffizzi-controller/app pods will not become Healthy until their
+secrets exist (their `envFrom` secret refs are `optional: false`, so they intentionally
+wait). This is expected; a `secret "uffizzi-controller-env" not found` (or
+`uffizzi-web-envs`) event on those pods simply means Step 5 hasn't run yet.
+
 ```bash
-argocd app list
-argocd app get uffizzi-root-dev
-```
-Or in the ArgoCD UI. Wait until all of these are `Synced` / `Healthy`:
-`sealed-secrets-dev`, `uffizzi-cluster-operator-dev`, `uffizzi-controller-dev`,
-`uffizzi-app-dev`.
-
-Confirm workloads landed in `eph-env`:
-```bash
-kubectl -n eph-env get pods
-kubectl get crd | grep -E 'uffizzicluster|sealedsecret'
+argocd app get sealed-secrets-dev          # wait for Synced / Healthy
+kubectl -n eph-env get deploy sealed-secrets
 ```
 
-## Step 5 — Create the secrets
+## Step 5 — Create the secrets (before the control plane can go Healthy)
 
-The control plane needs its credentials as SealedSecrets. See
-[Secrets](06-secrets.md). In short:
+The control plane needs its credentials as SealedSecrets. See [Secrets](06-secrets.md).
+The helper generates all six required secrets (`uffizzi-postgres`, `uffizzi-redis`,
+`uffizzi-controller`, `uffizzi-first-user`, `uffizzi-web-envs`, `uffizzi-controller-env`):
 
 ```bash
 kubeseal --fetch-cert \
   --controller-name sealed-secrets --controller-namespace eph-env > pub-cert.pem
 
 ENV=dev CERT=pub-cert.pem \
-  PG_ADMIN_PW=... PG_PW=... REDIS_PW=... CTRL_PW=... \
+  PG_ADMIN_PW=... PG_USER='uffizzi-user' PG_PW=... PG_DB='uffizzi-app' \
+  REDIS_PW=... CTRL_USER='uffizzi-controller' CTRL_PW=... \
   ADMIN_EMAIL=admin@floci.dev.local ADMIN_PW=... \
   ./scripts/seal-secrets.sh
 
@@ -70,18 +91,33 @@ git add environments/dev/sealed-secrets/*.yaml && git commit -m "dev secrets" &&
 ```
 
 ArgoCD applies the SealedSecrets; the controller emits the plain Secrets into
-`eph-env`. Restart the app/controller if they started before the secrets existed:
+`eph-env`, and the uffizzi-controller/app pods start.
+
+## Step 6 — Watch the control plane converge
+
+Now the remaining Applications can become Healthy:
+```bash
+argocd app list
+argocd app get uffizzi-root-dev
+```
+Wait until all are `Synced` / `Healthy`: `sealed-secrets-dev`,
+`uffizzi-cluster-operator-dev`, `uffizzi-controller-dev`, `uffizzi-app-dev`.
+```bash
+kubectl -n eph-env get pods
+kubectl get crd | grep -E 'uffizzicluster|sealedsecret'
+```
+If the app/controller started before the secrets and are stuck, restart them:
 ```bash
 kubectl -n eph-env rollout restart deploy
 ```
 
-## Step 6 — Verify the API over HTTP
+## Step 7 — Verify the API over HTTP
 
 ```bash
 curl -i http://api.dev.local/     # expect an HTTP response (no TLS)
 ```
 
-## Step 7 — First login
+## Step 8 — First login
 
 ```bash
 uffizzi login --server http://api.dev.local

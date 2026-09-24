@@ -1,0 +1,37 @@
+# Default values for uffizzi-cluster-operator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: docker.io/uffizzi/uffizzi-cluster-operator
+  tag: v1.4.5
+# `flux` dependency values
+flux:
+  helmController:
+    enabled: true
+    metrics:
+      enabled: false
+  sourceController:
+    enabled: true
+    metrics:
+      enabled: false
+  kustomizeController:
+    enabled: false
+  notificationController:
+    enabled: false
+  imageAutomationController:
+    enabled: false
+  imageReflectorController:
+    enabled: false
+#cert-manager: # dependency
+#  enabled: true
+#  installCRDs: true
+#
+#ingress-nginx:
+#  controller:
+#    extraArgs:
+#      enable-ssl-passthrough: true
+# To install nginx-ingress and cert-manager charts
+# along with the rest apply the following tags (enabled by default)
+#tags:
+#  - ingress-nginx

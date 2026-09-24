@@ -37,5 +37,23 @@ uffizzi:
 # Secret; reference it per the chart's existingSecret mechanism where available.
 postgresql:
   enabled: true
+  # Bitnami relocated tagged images out of docker.io/bitnami (late-2025 migration);
+  # use the docker.io/bitnamilegacy mirror which still serves these pinned tags.
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 16.1.0-debian-11-r3
 redis:
   enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/redis
+    tag: 7.2.3-debian-11-r1
+
+# VENDORED-CHART PATCH (see charts/uffizzi-app + charts/README.md): disable the
+# redundant embedded uffizzi-cluster-operator 1.4.5 (we run patched 1.6.5 via
+# apps/staging/01-uffizzi-cluster-operator.yaml). Removes the dead flux images
+# and the hardcoded gcr.io/kubebuilder/kube-rbac-proxy.
+uffizzi-controller:
+  uffizzi-cluster-operator:
+    enabled: false

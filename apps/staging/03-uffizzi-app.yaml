@@ -12,9 +12,13 @@ metadata:
 spec:
   project: uffizzi
   sources:
-    - repoURL: "https://uffizzicloud.github.io/uffizzi"
-      chart: uffizzi-app
-      targetRevision: "1.3.0"
+    # VENDORED CHART: see charts/uffizzi-app + charts/README.md. Upstream 1.3.0
+    # embeds a redundant operator 1.4.5 -> flux 0.3.11 with dead bitnami/fluxcd-*
+    # and hardcoded gcr.io/kubebuilder/kube-rbac-proxy images. Vendored copy makes
+    # the embedded operator conditional; disabled via app-values.yaml.
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+      targetRevision: main
+      path: charts/uffizzi-app
       helm:
         valueFiles:
           - $values/environments/staging/app-values.yaml

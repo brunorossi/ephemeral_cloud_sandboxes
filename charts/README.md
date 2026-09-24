@@ -3,6 +3,83 @@
 Charts copied into this repo so we can patch issues the upstream charts do not
 let us override via values.
 
+> **Vendoring rule (learned the hard way):** vendor charts as **unpacked
+> subchart directories** under `charts/`, and do **NOT** commit `Chart.lock`
+> files or packaged `*.tgz` dependencies. A committed `*.tgz` (or a `Chart.lock`
+> that triggers `helm dependency build`) will re-pull the stock upstream
+> subchart and **shadow the patched unpacked directory**, silently
+> reintroducing the broken images. Keep only unpacked dirs so ArgoCD's
+> repo-server renders them directly without a dependency rebuild.
+
+## uffizzi-app (vendored from 1.3.0)
+
+**Why vendored:** the upstream `uffizzi-app` chart embeds this dependency tree:
+
+```
+uffizzi-app 1.3.0
+└─ uffizzi-controller 2.2.10
+   └─ uffizzi-cluster-operator 1.4.5   (embedded, redundant)
+      └─ flux 0.3.11
+```
+
+The embedded operator 1.4.5 pulls images that no longer exist:
+
+1. **`docker.io/bitnami/fluxcd-helm-controller`** and
+   **`fluxcd-source-controller`** — deleted in Broadcom's late-2025 "Bitnami
+   Secure Images" migration (`ErrImagePull: not found`).
+2. **`gcr.io/kubebuilder/kube-rbac-proxy:v0.13.1`** — retired by Google,
+   **hardcoded** in the operator's `controller-manager_deployment.yaml` with no
+   Helm value to override it.
+
+Because we already deploy a separately patched **`uffizzi-cluster-operator`
+1.6.5** via `apps/<env>/01-uffizzi-cluster-operator.yaml`, the embedded 1.4.5
+operator is redundant (and running two operators risks fighting over the same
+Flux CRDs / HelmReleases).
+
+**Patches applied to the vendored copy:**
+
+| File | Change |
+|---|---|
+| `charts/uffizzi-controller/Chart.yaml` | Added `condition: uffizzi-cluster-operator.enabled` to the embedded operator dependency so it can be disabled |
+| (all `Chart.lock` files) | Deleted, so ArgoCD renders the unpacked subchart dirs directly and never re-pulls stock flux |
+
+**Values applied per environment (`environments/<env>/app-values.yaml`):**
+
+```yaml
+# disable the redundant embedded operator (removes flux + kube-rbac-proxy)
+uffizzi-controller:
+  uffizzi-cluster-operator:
+    enabled: false
+# relocate Bitnami DB/cache images to the still-published legacy mirror
+postgresql:
+  image: { registry: docker.io, repository: bitnamilegacy/postgresql, tag: 16.1.0-debian-11-r3 }
+redis:
+  image: { registry: docker.io, repository: bitnamilegacy/redis, tag: 7.2.3-debian-11-r1 }
+```
+
+The `apps/<env>/03-uffizzi-app.yaml` Application references the vendored chart by
+`path: charts/uffizzi-app` (multi-source, with values via `$values`).
+
+**Verify (no dead image references should appear):**
+```bash
+helm template ua charts/uffizzi-app -f environments/dev/app-values.yaml \
+  | grep -E '^\s*image:' \
+  | grep -iE 'bitnami/fluxcd|gcr.io/kubebuilder|docker.io/bitnami/postgresql|docker.io/bitnami/redis'
+# (empty output = clean)
+```
+
+**Re-vendoring on upgrade:** re-pull the chart untarred, delete all `Chart.lock`
+files and any `*.tgz` under `charts/`, then re-add the `condition:` line to the
+embedded operator dependency:
+```bash
+helm pull uffizzi/uffizzi-app --version <NEW> --untar --untardir /tmp/ua
+# copy to charts/uffizzi-app, then:
+find charts/uffizzi-app -name Chart.lock -delete
+find charts/uffizzi-app -name '*.tgz' -delete
+# re-add: condition: uffizzi-cluster-operator.enabled  in
+#   charts/uffizzi-app/charts/uffizzi-controller/Chart.yaml
+```
+
 ## uffizzi-cluster-operator (vendored from 1.6.5)
 
 **Why vendored:** the upstream chart cannot be fixed with a values file for two

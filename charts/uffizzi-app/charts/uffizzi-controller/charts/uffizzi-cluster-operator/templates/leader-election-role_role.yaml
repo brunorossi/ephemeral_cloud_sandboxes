@@ -1,0 +1,40 @@
+apiVersion: {{ include "common.capabilities.rbac.apiVersion" . }}
+kind: Role
+metadata:
+  labels: {{ include "common.labels.standard" . | nindent 4 }}
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: uffizzi
+  name: {{ include "common.names.fullname" . }}-leader-election-role
+  namespace: {{ .Release.Namespace | quote }}
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch

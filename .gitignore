@@ -16,6 +16,11 @@ secrets-plain/
 
 # Helm
 charts/*.tgz
+# Vendored charts: never commit packaged deps or lock files — a committed *.tgz
+# (or Chart.lock that triggers `helm dependency build`) shadows the patched
+# unpacked subchart directories and reintroduces broken images. See charts/README.md.
+charts/**/charts/*.tgz
+charts/**/Chart.lock
 .helm/
 
 # Editor/OS noise

@@ -22,6 +22,12 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: eph-env
       server: https://kubernetes.default.svc
+    # The uffizzi-app chart bundles cert-manager (transitive dependency via
+    # uffizzi-controller). cert-manager renders leader-election Role/RoleBinding
+    # into kube-system, which cannot be disabled (no `condition` on the dep).
+    # Permit kube-system so ArgoCD can sync those resources.
+    - namespace: kube-system
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     # CRDs (UffizziCluster, SealedSecret) require cluster-scoped access
     - group: "*"

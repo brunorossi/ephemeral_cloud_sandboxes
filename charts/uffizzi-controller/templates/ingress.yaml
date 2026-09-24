@@ -2,9 +2,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Release.Name }}-controller
+  {{- if .Values.clusterIssuer }}
   annotations:
     cert-manager.io/cluster-issuer: {{ print .Release.Name "-" .Values.clusterIssuer | quote }}
+  {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
   - host: {{ .Values.ingress.hostname }}
     http:
@@ -16,7 +21,9 @@ spec:
             name: {{ .Release.Name }}-controller
             port:
               number: 8080
+  {{- if .Values.clusterIssuer }}
   tls:
   - hosts:
     - {{ .Values.ingress.hostname }}
     secretName: {{ .Values.ingress.hostname }}
+  {{- end }}

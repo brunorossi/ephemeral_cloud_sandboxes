@@ -82,31 +82,58 @@ find charts/uffizzi-app -name '*.tgz' -delete
 
 ## uffizzi-controller (vendored from 2.4.6)
 
-**Why vendored:** the upstream `uffizzi-controller` chart embeds
-`uffizzi-cluster-operator 1.6.5` (→ `flux`) as a dependency **with no
-`condition:`**, so it cannot be disabled via a values file
-(`--set uffizzi-cluster-operator.enabled=false` is ignored). Because we already
-deploy the operator separately via `apps/<env>/01-uffizzi-cluster-operator.yaml`,
-the embedded operator is redundant and its Flux resources collide with the
-standalone operator's, producing an ArgoCD `RepeatedResourceWarning`:
+**Why vendored:** the upstream `uffizzi-controller` chart embeds three
+dependencies with **no `condition:`** (so they can't be disabled via values),
+plus an Ingress template and ClusterIssuer templates hardwired for
+nginx + cert-manager TLS. On single-node K3s / Traefik / HTTP-only (floci's
+model) these cause failures:
 
-```
-Resource rbac.authorization.k8s.io/ClusterRole//uffizzi-controller-<env>-flux-eph-env-source-controller-gitreposi
-appeared 2 times among application resources.
-```
+1. **embedded `uffizzi-cluster-operator 1.6.5` (→ `flux`)** — redundant with the
+   standalone operator (`apps/<env>/01-uffizzi-cluster-operator.yaml`); its Flux
+   ClusterRoles collide → ArgoCD `RepeatedResourceWarning`:
+   ```
+   Resource rbac.authorization.k8s.io/ClusterRole//uffizzi-controller-<env>-flux-eph-env-source-controller-gitreposi
+   appeared 2 times among application resources.
+   ```
+2. **embedded `ingress-nginx`** — renders a `type: LoadBalancer` Service and an
+   IngressClass named `uffizzi`. On single-node K3s it never gets an external IP
+   and collides with Traefik on ports 80/443, so the
+   `uffizzi-controller-<env>-ingress-nginx-controller` pod hangs. floci uses
+   Traefik everywhere (API + every vcluster template pin `ingressClassName:
+   traefik`), so nginx is dead weight.
+3. **embedded `cert-manager`** — installs a ValidatingWebhookConfiguration that
+   hangs admission when cert-manager isn't actually running, and floci is
+   HTTP-only (no TLS).
+4. **`templates/ingress.yaml`** — always emitted a `tls:` block + a
+   `cert-manager.io/cluster-issuer` annotation and no `ingressClassName`,
+   violating HTTP-only/Traefik.
+5. **`templates/cluster-issuer-*.yaml`** — always emitted `cert-manager.io/v1`
+   ClusterIssuers; with cert-manager disabled the CRD is absent and ArgoCD sync
+   fails (`no matches for kind "ClusterIssuer"`).
 
 **Patches applied to the vendored copy:**
 
 | File | Change |
 |---|---|
-| `Chart.yaml` | Added `condition: uffizzi-cluster-operator.enabled` to the embedded `uffizzi-cluster-operator` dependency so it can be disabled |
+| `Chart.yaml` | Added `condition:` to the `ingress-nginx`, `cert-manager`, and `uffizzi-cluster-operator` dependencies so each can be disabled |
+| `templates/ingress.yaml` | Wrapped the `tls:` block and `cert-manager.io/cluster-issuer` annotation in `{{- if .Values.clusterIssuer }}`; added `ingressClassName` from `.Values.ingress.className` |
+| `templates/cluster-issuer-letsencrypt.yaml`, `cluster-issuer-zerossl.yaml`, `cluster-issuer-secret.yaml` | Wrapped in `{{- if .Values.clusterIssuer }}` so no cert-manager CRs render when TLS is off |
 | (all `Chart.lock` files) | Deleted, so ArgoCD renders the unpacked subchart dirs directly and never re-pulls stock flux |
 
 **Values applied per environment (`environments/<env>/controller-values.yaml`):**
 
 ```yaml
+ingress:
+  hostname: api.<env>.local
+  className: traefik          # controller Ingress via Traefik (HTTP-only)
+clusterIssuer: ""             # empty -> no cert-manager annotation / TLS block / ClusterIssuers
+cert-manager:
+  enabled: false
 # disable the redundant embedded operator (removes the duplicate Flux resources)
 uffizzi-cluster-operator:
+  enabled: false
+# disable the embedded ingress-nginx (floci is Traefik-only)
+ingress-nginx:
   enabled: false
 ```
 
@@ -114,27 +141,28 @@ The `apps/<env>/02-uffizzi-controller.yaml` Application references the vendored
 chart by `path: charts/uffizzi-controller` (multi-source, with values via
 `$values`).
 
-**Verify (the duplicated Flux ClusterRole should no longer be rendered):**
+**Verify (only the controller's own resources should render — no nginx / cert-manager / duplicate flux):**
 ```bash
 helm template uc charts/uffizzi-controller -f environments/dev/controller-values.yaml \
-  | grep -c 'flux.*source-controller-gitreposi'
-# 0 = embedded operator disabled; standalone operator is the sole owner
+  | grep -cE 'ingress-nginx-controller|cert-manager.io/v1|type: LoadBalancer|flux.*source-controller-gitreposi'
+# 0 = clean. Expected kinds: Deployment, Service, Ingress (traefik), ServiceAccount,
+#     ClusterRoleBinding, Secret.
 ```
 
 **Re-vendoring on upgrade:** re-pull the chart untarred, delete all `Chart.lock`
-files and any `*.tgz` under `charts/`, then re-add the `condition:` line:
+files and any `*.tgz` under `charts/`, then re-apply the patches above:
 ```bash
 helm pull uffizzi-controller/uffizzi-controller --version <NEW> --untar --untardir /tmp/uc
 # copy to charts/uffizzi-controller, then:
 find charts/uffizzi-controller -name Chart.lock -delete
 find charts/uffizzi-controller -name '*.tgz' -delete
-# re-add: condition: uffizzi-cluster-operator.enabled  in
-#   charts/uffizzi-controller/Chart.yaml
+# re-add the three `condition:` lines in charts/uffizzi-controller/Chart.yaml, and
+# re-gate templates/ingress.yaml + templates/cluster-issuer-*.yaml on .Values.clusterIssuer
 ```
 
-> Once upstream adds a `condition:` (or a values toggle) for the embedded
-> operator, this vendored copy can be removed and the Applications repointed at
-> the upstream Helm repo.
+> Once upstream adds `condition:`s for the embedded deps (or a values toggle) and
+> makes the Ingress/ClusterIssuer templates conditional on TLS, this vendored
+> copy can be removed and the Applications repointed at the upstream Helm repo.
 
 ## uffizzi-cluster-operator (vendored from 1.6.5)
 

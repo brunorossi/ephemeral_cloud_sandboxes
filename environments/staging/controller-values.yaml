@@ -8,9 +8,7 @@
 # HTTP-only ingress through K3s Traefik
 ingress:
   hostname: api.staging.local        # <-- API/controller hostname (HTTP)
-  # If the chart supports an ingress class / tls toggle, force HTTP here:
-  # className: traefik
-  # tls: false
+  className: traefik             # route the controller Ingress through Traefik
 
 # Disable TLS/cert issuance entirely
 clusterIssuer: ""                # no cert-manager issuer
@@ -35,6 +33,20 @@ podCidr: 10.42.0.0/16            # K3s default pod CIDR (verify on the node)
 # `condition` added to the vendored uffizzi-controller/Chart.yaml).
 # ---------------------------------------------------------------------------
 uffizzi-cluster-operator:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# VENDORED-CHART PATCH: disable embedded ingress-nginx (see charts/README.md).
+# floci is Traefik-only / HTTP-only (spec Requirement 3). The controller chart
+# embeds ingress-nginx with a `type: LoadBalancer` Service and an IngressClass
+# named `uffizzi`, which on single-node K3s cannot get an external IP and
+# collides with Traefik on ports 80/443 -> the
+# uffizzi-controller-<env>-ingress-nginx-controller pod hangs. Nothing in floci
+# uses the nginx class: the API and every vcluster template pin
+# `ingressClassName: traefik`. Disable it (requires the `condition` added to
+# the vendored uffizzi-controller/Chart.yaml).
+# ---------------------------------------------------------------------------
+ingress-nginx:
   enabled: false
 
 # Controller <-> app shared credentials come from a SealedSecret (see

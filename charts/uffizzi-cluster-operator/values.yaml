@@ -3,8 +3,8 @@
 # Declare variables to be passed into your templates.
 
 image:
-  repository: docker.io/uffizzi/uffizzi-cluster-operator
-  tag: v1.6.5
+  repository: ghcr.io/brunorossi/uffizzi-cluster-operator
+  tag: v1.6.5-arm64
 manager:
   concurrent: 5
 # `flux` dependency values

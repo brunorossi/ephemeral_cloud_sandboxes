@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: uffizzi-redis
+  namespace: eph-env
+spec:
+  encryptedData:
+    redis-password: AgAwpU3/vp6OnKNlAlDEgb0F9XV0IfyG3up3s+N/fytzPJazF4W03UTwlUgqRoJl8pUZvzd384nLo0xcoRGeqDZn+OU+2WNg0WROrkeZlSA9K2CW3g1Wg4UJEkc21kqdz/aRbPuONzyPHB1RGKZCA3+dChkg0VyJ0UTfh40x74SQ+rhTfDhK7EWhYY3oLE3+AKmy5hYmBEsndUzaDm5MsTcY7F/0vkSrUVS0JhMO9mGu4QDX4losnxO+maNf+9eZuvcEkSY0PesbDjRljvRXPvnslFZNnBjuLONgBwk7qnJbKjgX4GJRrJjM/eufE4cbDDlsOPRT8PuBG782uRKg3H5eFY0V9OE2NoO5vlKRWh1bT2e7XznhYEOm6G3qM5WSRaQLlgPutMr8477wPcfZsuQtE+N1egvfsYPNrOiFyelJo2vVaWzhT14ZaRlgcsdyBnnyidKnzbJ2qJA12Z5FfiXr7ouUXW5l0HBCejpd4Idj2EMAxPc2QpfUt5QMASirOX2CJlmNF4HEjdlMOgcfqGyR2YV+rXNFyeRmmVpzCLMHFCgoeR2xBa6XtzEzX6S/qf3IOYJ38pZZTHg2xwGcJRLRHpgpLVyVYzUm6DlpkrPh12ryAilRcl54yrEG4Y5V0qV1LkwdjZ9yrE58pY1K+cShPvR14G2wHHKlydE+fuQcIPxyTU5mvdBhYeQtjo1keirMp64ngy0nwv/R
+  template:
+    metadata:
+      name: uffizzi-redis
+      namespace: eph-env

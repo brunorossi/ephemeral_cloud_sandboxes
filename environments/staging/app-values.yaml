@@ -16,7 +16,9 @@ env: production
 app_url: http://api.staging.local        # HTTP (no TLS)
 webHostname: api.staging.local           # host for the web-ingress
 ingressClassName: traefik                # route the API Ingress through Traefik
-image: uffizzi/app
+# Upstream uffizzi/app publishes linux/amd64 ONLY; this cluster is arm64. Point at
+# a self-built arm64 image pushed to GHCR. Replace <you> with your GitHub user/org.
+image: ghcr.io/brunorossi/uffizzi-app:v1.3.0-arm64
 web_replicas: 1
 sidekiq_replicas: 1
 # In-cluster standalone controller service in eph-env (we disable the embedded one):

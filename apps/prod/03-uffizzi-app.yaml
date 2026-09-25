@@ -16,13 +16,13 @@ spec:
     # embeds a redundant operator 1.4.5 -> flux 0.3.11 with dead bitnami/fluxcd-*
     # and hardcoded gcr.io/kubebuilder/kube-rbac-proxy images. Vendored copy makes
     # the embedded operator conditional; disabled via app-values.yaml.
-    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"
       targetRevision: main
       path: charts/uffizzi-app
       helm:
         valueFiles:
           - $values/environments/prod/app-values.yaml
-    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"   # <-- REPLACE
+    - repoURL: "https://github.com/brunorossi/ephemeral_cloud_sandboxes.git"
       targetRevision: main
       ref: values
   destination:

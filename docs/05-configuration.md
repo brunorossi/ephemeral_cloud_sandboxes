@@ -25,12 +25,12 @@ environments/<env>/
 | `<username>` | `environments/*/templates/*.yaml` | Developer name |
 | `api.<env>.local` | `environments/*`, `apps/*` | Real hostnames if any |
 | `<env>.local` | `environments/*` (DNS zone) | Real domain if any |
-| chart versions `# <-- verify` | `apps/*` | Pinned versions |
+| sealed-secrets chart `targetRevision` | `apps/*/00-sealed-secrets.yaml` | Pinned version if you change it (the Uffizzi charts are vendored — no `targetRevision` to pin) |
 | resource quota / image tags | `environments/*/templates/*.yaml` | Agreed CPU/memory; pin `floci/floci`, `floci/floci-az`, `docker:*-dind` |
 
 Find remaining placeholders:
 ```bash
-grep -rnE "<ORG>|<username>|<-- verify|\.local" --include='*.yaml' .
+grep -rnE "<ORG>|<username>|\.local" --include='*.yaml' .
 ```
 
 ## Per-environment differences

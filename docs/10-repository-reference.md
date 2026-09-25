@@ -31,7 +31,8 @@ uffizzi-floci/
 │   └── root-app-prod.yaml            # app-of-apps root (prod, MANUAL sync)
 ├── apps/                             # ArgoCD child Applications, per environment
 │   ├── dev/ | staging/ | prod/
-│   │   ├── 00-sealed-secrets.yaml            # sync-wave -3
+│   │   ├── 00-sealed-secrets.yaml            # sync-wave -3 (Sealed Secrets controller)
+│   │   ├── 00b-sealed-secrets-resources.yaml # sync-wave -2 (syncs the SealedSecret CRs)
 │   │   ├── 01-uffizzi-cluster-operator.yaml  # sync-wave -1
 │   │   ├── 02-uffizzi-controller.yaml        # sync-wave  0 (HTTP-only)
 │   │   └── 03-uffizzi-app.yaml               # sync-wave  1
@@ -84,9 +85,12 @@ uffizzi-floci/
 
 ### `apps/<env>/`
 Each file is an ArgoCD `Application`. Numeric prefix hints the intended order and maps
-to a `sync-wave`. **All three Uffizzi charts are served from vendored copies** under
-`charts/` (patched for broken images, HTTP-only/Traefik, and sealed credentials):
-`01-uffizzi-cluster-operator.yaml` is single-source (`path:` only);
+to a `sync-wave`. `00-sealed-secrets.yaml` installs the Sealed Secrets **controller**
+(Bitnami chart); `00b-sealed-secrets-resources.yaml` syncs the encrypted **SealedSecret
+manifests** from `environments/<env>/sealed-secrets/` (so the controller can decrypt
+them into the `Secret`s the charts consume). **All three Uffizzi charts are served from
+vendored copies** under `charts/` (patched for broken images, HTTP-only/Traefik, and
+sealed credentials): `01-uffizzi-cluster-operator.yaml` is single-source (`path:` only);
 `02-uffizzi-controller.yaml` and `03-uffizzi-app.yaml` are multi-source (`path:` chart
 + values from this Git repo via `ref: values`). See [`charts/README.md`](../charts/README.md).
 All deploy into `eph-env`.
@@ -111,6 +115,8 @@ All deploy into `eph-env`.
 |---|---|
 | `README.md` | Why charts are vendored and how to re-vendor on upgrade |
 | `uffizzi-cluster-operator/` | Vendored operator chart (1.6.5) patched to fix retired `gcr.io/kubebuilder/kube-rbac-proxy` and deleted `bitnami/fluxcd-*` images |
+| `uffizzi-controller/` | Vendored controller chart (2.4.6) patched for HTTP-only/Traefik (no nginx/cert-manager, embedded operator disabled) + sealed creds |
+| `uffizzi-app/` | Vendored app chart (1.3.0) patched to disable the embedded controller stack, render Traefik HTTP-only ingress, and layer sealed creds |
 
 ### `.kiro/specs/uffizzi-floci/`
 | File | Purpose |
@@ -123,4 +129,6 @@ All deploy into `eph-env`.
 - Child Application names: `<component>-<env>` (e.g. `uffizzi-app-dev`).
 - Virtual cluster names: `dev-<username>` (one per developer).
 - Environment hosts: `api.<env>.local`, env apps at `dev-<username>.<env>.local`.
-- Sync-waves: `-3` secrets, `-1` operator, `0` controller, `1` app, `2` templates.
+- Sync-waves: `-3` Sealed Secrets controller, `-2` SealedSecret resources, `-1`
+  operator, `0` controller, `1` app. (There is no templates Application — the
+  `floci-*` presets are applied per-developer, not by ArgoCD.)

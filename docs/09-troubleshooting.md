@@ -20,8 +20,27 @@ argocd app get uffizzi-app-dev
   and that the path `environments/<env>/...` exists on that branch.
 
 ### Sync ordering problems
-- Confirm `sync-wave` annotations are present. Sealed Secrets (`-3`) must be healthy
-  before app/controller need their secrets.
+- `sync-wave` annotations order how the **root** app *applies* the child Applications;
+  they do **not** gate on health. Once created, children reconcile in parallel, and
+  `selfHeal: true` drives convergence. So a component being briefly unhealthy while an
+  earlier one is still coming up is expected, not a misconfiguration.
+- Confirm `sync-wave` annotations are present. The Sealed Secrets controller (`-3`)
+  and the `SealedSecret` resources (`-2`, `00b-sealed-secrets-resources`) must both
+  reconcile before the app/controller pods (`0`/`1`) can obtain their secrets.
+
+### First-sync: `no matches for kind "SealedSecret"` on `00b`
+- Symptom: on a clean bootstrap, `sealed-secrets-resources-<env>` errors with
+  `no matches for kind "SealedSecret" in version "bitnami.com/v1alpha1"`.
+- Cause: `00b` (wave `-2`) applies `SealedSecret` CRs seconds after `00` (wave `-3`)
+  installs the CRD — the CRD may not be registered yet.
+- This is transient. `00b` carries `SkipDryRunOnMissingResource=true` and a `retry`
+  block, so it recovers within a minute. If it persists, confirm the controller app
+  is healthy and the CRD exists:
+  ```bash
+  argocd app get sealed-secrets-<env>
+  kubectl get crd sealedsecrets.bitnami.com
+  argocd app sync sealed-secrets-resources-<env>   # force a retry if needed
+  ```
 
 ### `RepeatedResourceWarning` (duplicate resource across Applications)
 - Symptom: `Resource ...ClusterRole//uffizzi-controller-<env>-flux-...-source-controller-gitreposi

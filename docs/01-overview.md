@@ -48,7 +48,8 @@ cluster always matches what is committed.
 - **TLS/HTTPS** — intentionally disabled; all traffic is plain HTTP.
 - **Real AWS/Azure infrastructure** — Uffizzi OSS creates *virtual* clusters that
   run on the host node. It does not provision cloud VMs. On a single node the two
-  templates therefore differ only by resource quota. If you later add labeled
+  templates therefore differ only by the floci.io **emulator** they deploy (AWS vs
+  Azure); quota and everything else are identical. If you later add labeled
   AWS/Azure worker nodes to this cluster, node placement can be introduced without
   changing the developer-facing template names.
 - **Multi-node / multi-cluster** topologies.

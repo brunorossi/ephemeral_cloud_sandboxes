@@ -82,9 +82,14 @@ Conventions:
 - [x] 9.1 Inspect the `UffizziCluster` CRD to identify the exact resource-sizing field(s).
 - [x] 9.2 Create `environments/<env>/templates/floci-aws.yaml` (smaller resource profile).
 - [x] 9.3 Create `environments/<env>/templates/floci-azure.yaml` (larger resource profile).
-- [x] 9.4 Ensure the two files are IDENTICAL except the resources block.
-- [x] 9.5 Create `apps/<env>/04-floci-templates.yaml` Application applying the
-      `templates/` folder, sync-wave `2`, destination ns `eph-env`.
+- [x] 9.4 Ensure the two files are IDENTICAL except the floci.io emulator they deploy
+      (AWS `floci/floci` vs Azure `floci/floci-az`). _(Superseded: the original plan
+      differed by resource profile; the shipped templates share identical quota and
+      differ only by the emulator + its DinD wiring.)_
+- [x] 9.5 ~~Create `apps/<env>/04-floci-templates.yaml` Application applying the
+      `templates/` folder, sync-wave `2`.~~ **Dropped:** the presets carry `<username>`
+      placeholders (not valid RFC 1123 object names), so they are applied per-developer
+      via the Uffizzi CLI / sed-substitution, not by ArgoCD.
       _Requirements: 5.1, 5.2, 5.5_
 
 ## 10. Per-developer single virtual cluster

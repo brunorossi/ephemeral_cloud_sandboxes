@@ -30,7 +30,8 @@ ArgoCD (pre-installed, ns: argocd)
  └─ AppProject "uffizzi"                (added by this repo, into ns argocd)
      └─ Root Application per env         (bootstrap/root-app-<env>.yaml)
          │  watches apps/<env>/ (recurse)
-         ├─ 00-sealed-secrets            sync-wave -3   → ns eph-env
+         ├─ 00-sealed-secrets            sync-wave -3   → ns eph-env  (controller)
+         ├─ 00b-sealed-secrets-resources sync-wave -2   → ns eph-env  (SealedSecret CRs)
          ├─ 01-uffizzi-cluster-operator  sync-wave -1   → ns eph-env
          ├─ 02-uffizzi-controller        sync-wave  0   → ns eph-env
          └─ 03-uffizzi-app               sync-wave  1   → ns eph-env
@@ -42,8 +43,21 @@ ArgoCD (pre-installed, ns: argocd)
 - **Root Application** points at `apps/<env>` with `directory.recurse: true`, so every
   Application YAML there becomes a managed child. Add/remove a file → add/remove a
   component.
-- **sync-wave** annotations guarantee ordering: Sealed Secrets first (so other
-  components' secrets can be decrypted), then operator, controller, app.
+- **sync-wave** annotations set the order in which the **root** app *applies* the child
+  Application objects: the Sealed Secrets controller first (`-3`), then the
+  `SealedSecret` resources (`-2`, from `00b-sealed-secrets-resources.yaml`), then
+  operator (`-1`), controller (`0`), app (`1`). Note this orders *creation* of the
+  child Applications, not their readiness — once created, each child reconciles
+  independently and in parallel. **`selfHeal: true` (on every Application) is what
+  drives convergence:** the controller/app pods use `envFrom` secret refs with
+  `optional: false`, so they wait (Pending, not failed) until their `Secret`s exist,
+  then start automatically. On a first bootstrap you may briefly see a transient
+  `no matches for kind "SealedSecret"` on `00b` (the CRD from `00` is registering) and
+  `secret ... not found` on the app/controller pods — both self-resolve. The two-step
+  secrets split matters: `00` installs the decryptor (the controller Helm release),
+  and `00b` syncs the encrypted `SealedSecret` manifests under
+  `environments/<env>/sealed-secrets/` so the controller can turn them into plain
+  `Secret`s.
 - Child Applications read their values file from this Git repo via a `ref: values`
   source. **All three Uffizzi charts are served from vendored copies in this repo**
   (`charts/uffizzi-cluster-operator`, `charts/uffizzi-controller`, `charts/uffizzi-app`,
@@ -60,8 +74,8 @@ ArgoCD (pre-installed, ns: argocd)
 |---|---|---|
 | Sealed Secrets controller | Helm release | Decrypts `SealedSecret` → `Secret` in `eph-env` |
 | uffizzi-cluster-operator | Helm release (vendored chart) | Reconciles `UffizziCluster` CRs into vclusters |
-| uffizzi-controller | Helm release | Proxies Uffizzi API calls to the Kubernetes API |
-| uffizzi-app | Helm release | REST API (Rails) + Sidekiq workers; CLI endpoint |
+| uffizzi-controller | Helm release (vendored chart) | Proxies Uffizzi API calls to the Kubernetes API |
+| uffizzi-app | Helm release (vendored chart) | REST API (Rails) + Sidekiq workers; CLI endpoint |
 | PostgreSQL | subchart | Primary datastore for uffizzi-app |
 | Redis | subchart | Cache / Sidekiq queue backend |
 

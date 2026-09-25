@@ -25,14 +25,19 @@ Spec: `.kiro/specs/uffizzi-floci/` (requirements, design, tasks).
 | Component | Role | Source |
 |---|---|---|
 | sealed-secrets | Decrypts SealedSecrets → Secrets | Helm (bitnami-labs) |
-| uffizzi-cluster-operator | Manages `UffizziCluster` → vclusters | Helm (upstream) |
-| uffizzi-controller | Proxy Uffizzi API ↔ Kubernetes API (HTTP) | Helm (upstream) |
-| uffizzi-app | REST API (Rails) + Sidekiq; CLI endpoint | Helm (upstream) |
+| uffizzi-cluster-operator | Manages `UffizziCluster` → vclusters | Helm (vendored under `charts/`) |
+| uffizzi-controller | Proxy Uffizzi API ↔ Kubernetes API (HTTP) | Helm (vendored under `charts/`) |
+| uffizzi-app | REST API (Rails) + Sidekiq; CLI endpoint | Helm (vendored under `charts/`) |
 | postgresql, redis | Data dependencies of uffizzi-app | subcharts |
 
 ## Sync order (ArgoCD sync-waves)
-`-3` sealed-secrets → `-1` cluster-operator → `0` controller → `1` app →
-`2` floci-templates.
+`-3` sealed-secrets controller → `-2` sealed-secret resources → `-1` cluster-operator
+→ `0` controller → `1` app.
+
+> There is **no** `floci-templates` Application. The `floci-aws`/`floci-azure` presets
+> under `environments/<env>/templates/` carry `<username>` placeholders (not valid
+> RFC 1123 object names), so they are created per-developer via the Uffizzi CLI or by
+> substituting `<username>` and applying a copy — not managed by ArgoCD.
 
 ## One virtual cluster per developer
 - **Naming convention:** `dev-<username>` (unique per developer in `eph-env`).

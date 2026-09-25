@@ -48,11 +48,16 @@ GitOps control flow:
 ArgoCD (existing, ns: argocd)
  └─ AppProject: uffizzi   (created by this repo, in ns argocd)
      └─ root Application (per env)  ── watches apps/<env>/ (recurse)
-          ├─ 00-sealed-secrets           (sync-wave -3)
+          ├─ 00-sealed-secrets           (sync-wave -3)  → ns eph-env  (controller)
+          ├─ 00b-sealed-secrets-resources(sync-wave -2)  → ns eph-env  (SealedSecret CRs)
           ├─ 01-uffizzi-cluster-operator (sync-wave -1)  → ns eph-env
           ├─ 02-uffizzi-controller       (sync-wave  0)  → ns eph-env
-          ├─ 03-uffizzi-app              (sync-wave  1)  → ns eph-env
-          └─ 04-floci-templates          (sync-wave  2)  → ns eph-env
+          └─ 03-uffizzi-app              (sync-wave  1)  → ns eph-env
+          # NOTE (superseded): the original design included a
+          # 04-floci-templates Application at sync-wave 2. It was dropped —
+          # the floci-* presets contain <username> placeholders (not valid
+          # RFC 1123 names) and are applied per-developer via the Uffizzi CLI,
+          # not managed by ArgoCD. See docs/10-repository-reference.md.
 ```
 
 ## Repository structure
@@ -71,10 +76,11 @@ uffizzi-floci/
 ├── apps/
 │   ├── dev/ | staging/ | prod/
 │   │   ├── 00-sealed-secrets.yaml
+│   │   ├── 00b-sealed-secrets-resources.yaml   # syncs the SealedSecret CRs
 │   │   ├── 01-uffizzi-cluster-operator.yaml
 │   │   ├── 02-uffizzi-controller.yaml
-│   │   ├── 03-uffizzi-app.yaml
-│   │   └── 04-floci-templates.yaml
+│   │   └── 03-uffizzi-app.yaml
+│   │   # (no 04-floci-templates.yaml — superseded; presets applied per-developer)
 └── environments/
     ├── dev/ | staging/ | prod/
     │   ├── app-values.yaml

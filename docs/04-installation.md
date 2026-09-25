@@ -59,12 +59,17 @@ ArgoCD now creates the child Applications from `apps/dev/` in sync-wave order.
 
 ## Step 4 — Wait for the Sealed Secrets controller
 
-The child Applications sync in `sync-wave` order: `sealed-secrets` (`-3`) comes up
-first. **Wait for it before creating secrets** — you need its controller running to
-seal against, and the uffizzi-controller/app pods will not become Healthy until their
-secrets exist (their `envFrom` secret refs are `optional: false`, so they intentionally
-wait). This is expected; a `secret "uffizzi-controller-env" not found` (or
-`uffizzi-web-envs`) event on those pods simply means Step 5 hasn't run yet.
+The root app *applies* the child Applications in `sync-wave` order — `sealed-secrets`
+(`-3`) first — but the waves order **creation**, not readiness: children then reconcile
+in parallel and `selfHeal` drives convergence. **Wait for the controller before
+creating secrets** — you need it running to seal against, and the uffizzi-controller/app
+pods will not become Healthy until their secrets exist (their `envFrom` secret refs are
+`optional: false`, so they intentionally wait). This is expected; a
+`secret "uffizzi-controller-env" not found` (or `uffizzi-web-envs`) event on those pods
+simply means Step 5 hasn't run yet. You may also briefly see
+`sealed-secrets-resources-dev` (`00b`, wave `-2`) error with
+`no matches for kind "SealedSecret"` until the CRD from `00` registers — it retries and
+self-resolves (see [Troubleshooting](09-troubleshooting.md)).
 
 ```bash
 argocd app get sealed-secrets-dev          # wait for Synced / Healthy
@@ -72,6 +77,17 @@ kubectl -n eph-env get deploy sealed-secrets
 ```
 
 ## Step 5 — Create the secrets (before the control plane can go Healthy)
+
+> **Why this order is inherent (not just a manual convenience).** Sealing requires the
+> controller's public cert (`kubeseal --fetch-cert`), and the cert only exists once the
+> Sealed Secrets **controller is running** — which is why Step 4 (install controller)
+> must precede Step 5 (seal). You cannot seal before the controller exists, so this
+> bootstrap chicken-and-egg means the very first secrets are always created *after* the
+> initial root-app apply. From then on it is pure GitOps: the sealed manifests live in
+> Git, ArgoCD's `00b` app applies them, and `selfHeal` converges the control plane with
+> no further manual steps. (Re-installs are seamless too, *if* you backed up the
+> controller's sealing key — see [Operations](08-operations.md#backups); otherwise
+> re-seal against the new cert.)
 
 The control plane needs its credentials as SealedSecrets. See [Secrets](06-secrets.md).
 The helper generates all six required secrets (`uffizzi-postgres`, `uffizzi-redis`,
@@ -90,8 +106,9 @@ ENV=dev CERT=pub-cert.pem \
 git add environments/dev/sealed-secrets/*.yaml && git commit -m "dev secrets" && git push
 ```
 
-ArgoCD applies the SealedSecrets; the controller emits the plain Secrets into
-`eph-env`, and the uffizzi-controller/app pods start.
+ArgoCD applies the SealedSecrets (via the `00b-sealed-secrets-resources` Application,
+sync-wave `-2`, which watches `environments/<env>/sealed-secrets/`); the controller
+emits the plain Secrets into `eph-env`, and the uffizzi-controller/app pods start.
 
 ## Step 6 — Watch the control plane converge
 
@@ -101,7 +118,8 @@ argocd app list
 argocd app get uffizzi-root-dev
 ```
 Wait until all are `Synced` / `Healthy`: `sealed-secrets-dev`,
-`uffizzi-cluster-operator-dev`, `uffizzi-controller-dev`, `uffizzi-app-dev`.
+`sealed-secrets-resources-dev`, `uffizzi-cluster-operator-dev`,
+`uffizzi-controller-dev`, `uffizzi-app-dev`.
 ```bash
 kubectl -n eph-env get pods
 kubectl get crd | grep -E 'uffizzicluster|sealedsecret'

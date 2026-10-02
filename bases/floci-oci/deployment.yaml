@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment
+  labels:
+    app: floci-oci
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-oci
+  template:
+    metadata:
+      labels:
+        app: floci-oci
+    spec:
+      # --- Functions / fnserver reachability (hardened) ---
+      # floci-oci starts the Fn server as a container INSIDE the DinD daemon and
+      # connects to it by container name (http://floci-oci-fnserver:8080). That
+      # name resolves only via Docker's embedded DNS, served to containers ON a
+      # Docker network. floci-oci runs as this pod's main container (it drives
+      # the daemon over TCP), so it is NOT on that network and must resolve the
+      # name another way. Because both containers share the pod network
+      # namespace, floci-oci can still REACH the fnserver container by IP.
+      #
+      # To make that IP deterministic (instead of relying on the default bridge
+      # handing out 172.17.0.2 to "the first container", which breaks if any
+      # other container starts first), the dind sidecar pre-creates a DEDICATED
+      # user-defined network "floci-oci-net" with a fixed subnet 172.28.0.0/24,
+      # and floci-oci is told to attach fnserver to it via
+      # FLOCI_OCI_SERVICES_DOCKER_NETWORK. On that isolated network fnserver is
+      # the only member, so it deterministically gets 172.28.0.2. This hostAlias
+      # maps the name to that fixed address.
+      hostAliases:
+      - ip: "172.28.0.2"
+        hostnames:
+        - floci-oci-fnserver
+      containers:
+
+      - name: floci-oci
+        image: floci/floci-oci:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          # Embedded DNS binds a privileged port when running inside Docker; run
+          # as root so NET_BIND_SERVICE is effective (k8s can't set it ambient).
+          runAsUser: 0
+          capabilities:
+            add: ["NET_BIND_SERVICE"]
+        ports:
+        - containerPort: 4599
+          name: api-port
+        env:
+        - name: FLOCI_OCI_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_OCI_STORAGE_PERSISTENT_PATH
+          value: /app/data
+        - name: FLOCI_OCI_DEFAULT_REGION
+          value: us-ashburn-1
+        - name: FLOCI_OCI_DEFAULT_NAMESPACE
+          value: floci-local
+        # Docker-backed services (Functions via fnproject/fnserver, OKE via
+        # rancher/k3s) need the daemon; reach it over TCP on localhost (same pod).
+        # If you don't use Functions/OKE, set FLOCI_OCI_SERVICES_FUNCTIONS_MOCK and
+        # FLOCI_OCI_SERVICES_OKE_MOCK to "true" and drop the dind sidecar.
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        # Attach sidecar containers (fnserver) to the dedicated network the dind
+        # sidecar pre-creates below, so fnserver lands on 172.28.0.2 (matching
+        # the hostAlias above) instead of the shared default bridge.
+        - name: FLOCI_OCI_SERVICES_DOCKER_NETWORK
+          value: floci-oci-net
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+
+      - name: dind-sidecar
+        image: docker:24.0.7-dind
+        securityContext:
+          privileged: true
+        # arm64 note: Functions runs YOUR FDK image and OKE uses rancher/k3s
+        # (multi-arch), so use arm64/multi-arch images and no QEMU emulation is
+        # needed.
+        #
+        # Wrap the daemon entrypoint: a background watcher waits for the Docker
+        # socket, then (idempotently) creates the dedicated "floci-oci-net"
+        # network with a FIXED subnet so fnserver always gets 172.28.0.2. Then
+        # dockerd is exec'd normally with the same host flags.
+        command:
+        - /bin/sh
+        - -c
+        - |
+          (
+            until docker info >/dev/null 2>&1; do sleep 1; done
+            docker network inspect floci-oci-net >/dev/null 2>&1 \
+              || docker network create --subnet 172.28.0.0/24 floci-oci-net
+            echo "floci-oci-net ready (172.28.0.0/24)"
+          ) &
+          exec dockerd-entrypoint.sh --host=tcp://0.0.0.0:2375 --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+
+      volumes:
+      - name: shared-tmp
+        emptyDir: {}
+      - name: storage
+        persistentVolumeClaim:
+          claimName: data-pvc

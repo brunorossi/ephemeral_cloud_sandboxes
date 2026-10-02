@@ -1,0 +1,145 @@
+# Standalone reference manifest for a single floci-gcp stack (id=brossi, env=dev).
+# Generated from: kubectl kustomize overlays/dev/brossi-dev-floci-gcp  (+ Namespace and per-resource
+# namespace injection, which in GitOps is applied by ArgoCD, not the overlay).
+# Deploy directly with: kubectl apply -f examples/floci-gcp.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: brossi-dev-floci-gcp
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: brossi-dev-floci-gcp
+  labels:
+    app.kubernetes.io/component: floci-gcp
+    env: dev
+    owner: brossi
+    tech: floci-gcp
+  name: brossi-dev-floci-gcp-service
+spec:
+  ports:
+  - port: 4588
+    protocol: TCP
+    targetPort: api-port
+  selector:
+    app: floci-gcp
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: brossi-dev-floci-gcp
+  labels:
+    app.kubernetes.io/component: floci-gcp
+    env: dev
+    owner: brossi
+    tech: floci-gcp
+  name: brossi-dev-floci-gcp-data-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: brossi-dev-floci-gcp
+  labels:
+    app: floci-gcp
+    app.kubernetes.io/component: floci-gcp
+    env: dev
+    owner: brossi
+    tech: floci-gcp
+  name: brossi-dev-floci-gcp-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-gcp
+  template:
+    metadata:
+      labels:
+        app: floci-gcp
+    spec:
+      containers:
+      - env:
+        - name: FLOCI_GCP_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_GCP_STORAGE_PERSISTENT_PATH
+          value: /app/data
+        - name: FLOCI_GCP_DEFAULT_PROJECT_ID
+          value: floci-local
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        image: floci/floci-gcp:latest
+        imagePullPolicy: IfNotPresent
+        name: floci-gcp
+        ports:
+        - containerPort: 4588
+          name: api-port
+        securityContext:
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+      - args:
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        image: docker:24.0.7-dind
+        name: dind-sidecar
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+      volumes:
+      - emptyDir: {}
+        name: shared-tmp
+      - name: storage
+        persistentVolumeClaim:
+          claimName: brossi-dev-floci-gcp-data-pvc
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: brossi-dev-floci-gcp
+  labels:
+    app.kubernetes.io/component: floci-gcp
+    env: dev
+    owner: brossi
+    tech: floci-gcp
+  name: brossi-dev-floci-gcp-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: brossi.dev.floci-gcp.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-gcp-service
+            port:
+              number: 4588
+        path: /
+        pathType: Prefix
+  - host: '*.brossi.dev.floci-gcp.local'
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-gcp-service
+            port:
+              number: 4588
+        path: /
+        pathType: Prefix

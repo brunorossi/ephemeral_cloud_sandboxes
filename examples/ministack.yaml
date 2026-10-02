@@ -1,0 +1,139 @@
+# Standalone reference manifest for a single ministack stack (id=brossi, env=dev).
+# Generated from: kubectl kustomize overlays/dev/brossi-dev-ministack  (+ Namespace and per-resource
+# namespace injection, which in GitOps is applied by ArgoCD, not the overlay).
+# Deploy directly with: kubectl apply -f examples/ministack.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: brossi-dev-ministack
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: brossi-dev-ministack
+  labels:
+    app.kubernetes.io/component: ministack
+    env: dev
+    owner: brossi
+    tech: ministack
+  name: brossi-dev-ministack-service
+spec:
+  ports:
+  - port: 4566
+    protocol: TCP
+    targetPort: api-port
+  selector:
+    app: ministack
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: brossi-dev-ministack
+  labels:
+    app.kubernetes.io/component: ministack
+    env: dev
+    owner: brossi
+    tech: ministack
+  name: brossi-dev-ministack-data-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: brossi-dev-ministack
+  labels:
+    app: ministack
+    app.kubernetes.io/component: ministack
+    env: dev
+    owner: brossi
+    tech: ministack
+  name: brossi-dev-ministack-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ministack
+  template:
+    metadata:
+      labels:
+        app: ministack
+    spec:
+      containers:
+      - env:
+        - name: LAMBDA_EXECUTOR
+          value: docker
+        - name: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+        image: ministackorg/ministack:latest
+        imagePullPolicy: IfNotPresent
+        name: ministack
+        ports:
+        - containerPort: 4566
+          name: api-port
+        volumeMounts:
+        - mountPath: /var/run
+          name: shared-docker-sock
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /data
+          name: storage
+      - env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        image: docker:24.0.7-dind
+        name: dind-sidecar
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /var/run
+          name: shared-docker-sock
+        - mountPath: /tmp
+          name: shared-tmp
+      volumes:
+      - emptyDir: {}
+        name: shared-docker-sock
+      - emptyDir: {}
+        name: shared-tmp
+      - name: storage
+        persistentVolumeClaim:
+          claimName: brossi-dev-ministack-data-pvc
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: brossi-dev-ministack
+  labels:
+    app.kubernetes.io/component: ministack
+    env: dev
+    owner: brossi
+    tech: ministack
+  name: brossi-dev-ministack-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: brossi.dev.ministack.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-ministack-service
+            port:
+              number: 4566
+        path: /
+        pathType: Prefix
+  - host: '*.brossi.dev.ministack.local'
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-ministack-service
+            port:
+              number: 4566
+        path: /
+        pathType: Prefix

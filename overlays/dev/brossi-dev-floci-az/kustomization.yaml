@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Overlay: id "brossi", env "dev", tech "floci-az".
+# namePrefix makes every resource name start with "brossi-dev-floci-az-".
+namePrefix: brossi-dev-floci-az-
+
+resources:
+  - ../../../bases/floci-az
+
+labels:
+  - pairs:
+      owner: brossi
+      env: dev
+      tech: floci-az
+    includeSelectors: false
+
+patches:
+  - path: ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: ingress

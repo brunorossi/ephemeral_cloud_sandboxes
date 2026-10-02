@@ -1,0 +1,28 @@
+{
+  "stacks": [
+    {
+      "id": "brossi",
+      "tech": "ministack",
+      "env": "dev",
+      "path": "overlays/dev/brossi-dev-ministack"
+    },
+    {
+      "id": "brossi",
+      "tech": "floci-az",
+      "env": "dev",
+      "path": "overlays/dev/brossi-dev-floci-az"
+    },
+    {
+      "id": "brossi",
+      "tech": "floci-gcp",
+      "env": "dev",
+      "path": "overlays/dev/brossi-dev-floci-gcp"
+    },
+    {
+      "id": "brossi",
+      "tech": "floci-oci",
+      "env": "dev",
+      "path": "overlays/dev/brossi-dev-floci-oci"
+    }
+  ]
+}

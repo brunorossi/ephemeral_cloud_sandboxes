@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ephemeral-stacks-appset
+  namespace: argocd
+spec:
+  generators:
+  - git:
+      # TODO: replace with your real GitOps repository URL.
+      repoURL: 'https://github.com/brunorossi/ephemeral_cloud_sandboxes.git'
+      revision: HEAD
+      files:
+      - path: config/stacks.json
+  template:
+    metadata:
+      name: '{{tech}}-{{id}}-{{env}}'
+      namespace: argocd
+    spec:
+      project: default
+      source:
+        # TODO: replace with your real GitOps repository URL (same as above).
+        repoURL: 'https://github.com/brunorossi/ephemeral_cloud_sandboxes.git'
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: 'https://kubernetes.default.svc'
+        # One isolated namespace per stack instance, named "{id}-{env}-{tech}".
+        # Every resource inside is prefixed with this same name by the overlay's
+        # Kustomize namePrefix.
+        namespace: '{{id}}-{{env}}-{{tech}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

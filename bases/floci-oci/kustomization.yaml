@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Generic, reusable floci-oci base. Overlays apply namePrefix + labels and patch
+# the ingress hosts. No namespace is set here; ArgoCD/overlay owns it.
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/component: floci-oci
+    includeSelectors: false

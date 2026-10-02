@@ -1,0 +1,168 @@
+# Standalone reference manifest for a single floci-oci stack (id=brossi, env=dev).
+# Generated from: kubectl kustomize overlays/dev/brossi-dev-floci-oci  (+ Namespace and per-resource
+# namespace injection, which in GitOps is applied by ArgoCD, not the overlay).
+# Deploy directly with: kubectl apply -f examples/floci-oci.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: brossi-dev-floci-oci
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: brossi-dev-floci-oci
+  labels:
+    app.kubernetes.io/component: floci-oci
+    env: dev
+    owner: brossi
+    tech: floci-oci
+  name: brossi-dev-floci-oci-service
+spec:
+  ports:
+  - port: 4599
+    protocol: TCP
+    targetPort: api-port
+  selector:
+    app: floci-oci
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: brossi-dev-floci-oci
+  labels:
+    app.kubernetes.io/component: floci-oci
+    env: dev
+    owner: brossi
+    tech: floci-oci
+  name: brossi-dev-floci-oci-data-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: brossi-dev-floci-oci
+  labels:
+    app: floci-oci
+    app.kubernetes.io/component: floci-oci
+    env: dev
+    owner: brossi
+    tech: floci-oci
+  name: brossi-dev-floci-oci-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-oci
+  template:
+    metadata:
+      labels:
+        app: floci-oci
+    spec:
+      # fnserver is reached by name (http://floci-oci-fnserver:8080) which only
+      # resolves via Docker embedded DNS; floci-oci runs as the pod's main
+      # container (not on the Docker network) but shares the pod netns, so it
+      # reaches fnserver by IP. The dind sidecar pre-creates a dedicated network
+      # "floci-oci-net" (172.28.0.0/24) and floci-oci attaches fnserver to it via
+      # FLOCI_OCI_SERVICES_DOCKER_NETWORK, so fnserver deterministically gets
+      # 172.28.0.2 -- the address this hostAlias maps the name to.
+      hostAliases:
+      - ip: "172.28.0.2"
+        hostnames:
+        - floci-oci-fnserver
+      containers:
+      - env:
+        - name: FLOCI_OCI_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_OCI_STORAGE_PERSISTENT_PATH
+          value: /app/data
+        - name: FLOCI_OCI_DEFAULT_REGION
+          value: us-ashburn-1
+        - name: FLOCI_OCI_DEFAULT_NAMESPACE
+          value: floci-local
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        - name: FLOCI_OCI_SERVICES_DOCKER_NETWORK
+          value: floci-oci-net
+        image: floci/floci-oci:latest
+        imagePullPolicy: IfNotPresent
+        name: floci-oci
+        ports:
+        - containerPort: 4599
+          name: api-port
+        securityContext:
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+      - command:
+        - /bin/sh
+        - -c
+        - |
+          (
+            until docker info >/dev/null 2>&1; do sleep 1; done
+            docker network inspect floci-oci-net >/dev/null 2>&1 \
+              || docker network create --subnet 172.28.0.0/24 floci-oci-net
+            echo "floci-oci-net ready (172.28.0.0/24)"
+          ) &
+          exec dockerd-entrypoint.sh --host=tcp://0.0.0.0:2375 --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        image: docker:24.0.7-dind
+        name: dind-sidecar
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+      volumes:
+      - emptyDir: {}
+        name: shared-tmp
+      - name: storage
+        persistentVolumeClaim:
+          claimName: brossi-dev-floci-oci-data-pvc
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: brossi-dev-floci-oci
+  labels:
+    app.kubernetes.io/component: floci-oci
+    env: dev
+    owner: brossi
+    tech: floci-oci
+  name: brossi-dev-floci-oci-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: brossi.dev.floci-oci.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-oci-service
+            port:
+              number: 4599
+        path: /
+        pathType: Prefix
+  - host: '*.brossi.dev.floci-oci.local'
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-oci-service
+            port:
+              number: 4599
+        path: /
+        pathType: Prefix

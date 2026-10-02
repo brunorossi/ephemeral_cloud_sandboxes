@@ -1,0 +1,30 @@
+# Sets the per-instance ingress hosts for the brossi/dev/ministack stack.
+# The patch target (kind: Ingress, name: ingress) binds this to the base
+# ingress before namePrefix rewrites the name. Replacing spec.rules swaps both
+# host rules (exact + wildcard) in one go.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress
+spec:
+  rules:
+  - host: brossi.dev.ministack.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: service
+            port:
+              number: 4566
+  - host: "*.brossi.dev.ministack.local"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: service
+            port:
+              number: 4566

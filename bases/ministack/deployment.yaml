@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Canonical bare name -> "{id}-{env}-{tech}-deployment" after namePrefix.
+  name: deployment
+  labels:
+    app: ministack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ministack
+  template:
+    metadata:
+      labels:
+        app: ministack
+    spec:
+      containers:
+      # --- CONTAINER 1: MINISTACK ---
+      - name: ministack
+        image: ministackorg/ministack:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 4566
+          name: api-port
+        env:
+        - name: LAMBDA_EXECUTOR
+          value: "docker"
+        - name: DOCKER_HOST
+          value: unix:///var/run/docker.sock
+        volumeMounts:
+        # Shares the communication socket with the sidecar container
+        - mountPath: /var/run
+          name: shared-docker-sock
+        # Shares extracted Lambda source files to prevent bind mount source path errors
+        - mountPath: /tmp
+          name: shared-tmp
+        # Original data persistence storage
+        - mountPath: /data
+          name: storage
+
+      # --- CONTAINER 2: DOCKER IN DOCKER (SIDECAR) ---
+      - name: dind-sidecar
+        image: docker:24.0.7-dind
+        securityContext:
+          privileged: true # Required by DinD to spin up nested child containers
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: "" # Disables TLS for faster local communication over the shared socket
+        volumeMounts:
+        # Accesses the socket created to receive commands from MiniStack
+        - mountPath: /var/run
+          name: shared-docker-sock
+        # Accesses extracted Lambda source files to successfully mount them inside child containers
+        - mountPath: /tmp
+          name: shared-tmp
+
+      volumes:
+      # In-memory volume for sharing the communication docker.sock file
+      - name: shared-docker-sock
+        emptyDir: {}
+      # In-memory volume for sharing unzipped Lambda source codes between containers
+      - name: shared-tmp
+        emptyDir: {}
+      # PVC for persistent storage. claimName uses the canonical bare base name;
+      # Kustomize namePrefix rewrites it to "{id}-{env}-{tech}-data-pvc".
+      - name: storage
+        persistentVolumeClaim:
+          claimName: data-pvc

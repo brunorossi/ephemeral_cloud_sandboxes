@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  # Canonical bare name. Overlay namePrefix "{id}-{env}-{tech}-" turns this into
+  # "{id}-{env}-{tech}-data-pvc".
+  name: data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

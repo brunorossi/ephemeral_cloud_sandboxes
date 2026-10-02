@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment
+  labels:
+    app: floci-az
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-az
+  template:
+    metadata:
+      labels:
+        app: floci-az
+    spec:
+      containers:
+
+      - name: floci-az
+        image: floci/floci-az:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          # Floci starts an embedded DNS server on privileged UDP/53 when running
+          # inside Docker. NET_BIND_SERVICE from capabilities.add only reaches the
+          # permitted set; a non-root process also needs it ambient (not settable
+          # in k8s), so we run as root to make the capability effective.
+          runAsUser: 0
+          capabilities:
+            add: ["NET_BIND_SERVICE"]
+        ports:
+        - containerPort: 4577
+          name: api-port
+        env:
+        - name: FLOCI_AZ_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_AZ_STORAGE_PATH
+          value: /app/data
+        # Talk to the DinD daemon over TCP (same pod = shared net namespace),
+        # avoiding unix-socket permission races.
+        - name: FLOCI_AZ_DOCKER_DOCKER_HOST
+          value: tcp://localhost:2375
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+
+      - name: dind-sidecar
+        image: docker:24.0.7-dind
+        securityContext:
+          privileged: true
+        # The docker:dind entrypoint starts dockerd and forwards these args; we
+        # only add the TCP listener so floci-az can reach it on localhost:2375.
+        # NOTE (arm64): Azure Functions uses a fixed amd64-only Microsoft runtime
+        # image. To run Functions on an arm64 node you must register an amd64 QEMU
+        # binfmt handler and pre-pull the image; the .NET Functions host may still
+        # crash under emulation. Prefer scheduling Functions-using stacks on an
+        # amd64 node (nodeSelector: kubernetes.io/arch=amd64). Non-Functions Azure
+        # services (storage, queue, Cosmos, etc.) are unaffected.
+        args:
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+
+      volumes:
+      - name: shared-tmp
+        emptyDir: {}
+      - name: storage
+        persistentVolumeClaim:
+          claimName: data-pvc

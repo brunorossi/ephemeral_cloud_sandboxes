@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deployment
+  labels:
+    app: floci-gcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-gcp
+  template:
+    metadata:
+      labels:
+        app: floci-gcp
+    spec:
+      containers:
+
+      - name: floci-gcp
+        image: floci/floci-gcp:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          # Embedded DNS binds a privileged port when running inside Docker; run
+          # as root so NET_BIND_SERVICE is effective (k8s can't set it ambient).
+          runAsUser: 0
+          capabilities:
+            add: ["NET_BIND_SERVICE"]
+        ports:
+        - containerPort: 4588
+          name: api-port
+        env:
+        - name: FLOCI_GCP_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_GCP_STORAGE_PERSISTENT_PATH
+          value: /app/data
+        - name: FLOCI_GCP_DEFAULT_PROJECT_ID
+          value: floci-local
+        # Docker-backed services (Cloud Run, Cloud SQL, Kafka, GKE) need the
+        # daemon; reach it over TCP on localhost (same pod).
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+
+      - name: dind-sidecar
+        image: docker:24.0.7-dind
+        securityContext:
+          privileged: true
+        # arm64 note: Cloud Run runs a USER-SPECIFIED image, so use arm64/
+        # multi-arch images and no QEMU emulation is needed. DB/Kafka/k3s sidecars
+        # are already multi-arch. If you only use in-process GCP services
+        # (Pub/Sub, Firestore, GCS, Secret Manager, ...) you can drop this sidecar
+        # and the DOCKER_HOST env var.
+        args:
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+
+      volumes:
+      - name: shared-tmp
+        emptyDir: {}
+      - name: storage
+        persistentVolumeClaim:
+          claimName: data-pvc

@@ -1,0 +1,145 @@
+# Standalone reference manifest for a single floci-az stack (id=brossi, env=dev).
+# Generated from: kubectl kustomize overlays/dev/brossi-dev-floci-az  (+ Namespace and per-resource
+# namespace injection, which in GitOps is applied by ArgoCD, not the overlay).
+# Deploy directly with: kubectl apply -f examples/floci-az.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: brossi-dev-floci-az
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: brossi-dev-floci-az
+  labels:
+    app.kubernetes.io/component: floci-az
+    env: dev
+    owner: brossi
+    tech: floci-az
+  name: brossi-dev-floci-az-service
+spec:
+  ports:
+  - port: 4577
+    protocol: TCP
+    targetPort: api-port
+  selector:
+    app: floci-az
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: brossi-dev-floci-az
+  labels:
+    app.kubernetes.io/component: floci-az
+    env: dev
+    owner: brossi
+    tech: floci-az
+  name: brossi-dev-floci-az-data-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: brossi-dev-floci-az
+  labels:
+    app: floci-az
+    app.kubernetes.io/component: floci-az
+    env: dev
+    owner: brossi
+    tech: floci-az
+  name: brossi-dev-floci-az-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: floci-az
+  template:
+    metadata:
+      labels:
+        app: floci-az
+    spec:
+      containers:
+      - env:
+        - name: FLOCI_AZ_STORAGE_MODE
+          value: persistent
+        - name: FLOCI_AZ_STORAGE_PATH
+          value: /app/data
+        - name: FLOCI_AZ_DOCKER_DOCKER_HOST
+          value: tcp://localhost:2375
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
+        image: floci/floci-az:latest
+        imagePullPolicy: IfNotPresent
+        name: floci-az
+        ports:
+        - containerPort: 4577
+          name: api-port
+        securityContext:
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+        - mountPath: /app/data
+          name: storage
+      - args:
+        - --host=tcp://0.0.0.0:2375
+        - --host=unix:///var/run/docker.sock
+        env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+        image: docker:24.0.7-dind
+        name: dind-sidecar
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: shared-tmp
+      volumes:
+      - emptyDir: {}
+        name: shared-tmp
+      - name: storage
+        persistentVolumeClaim:
+          claimName: brossi-dev-floci-az-data-pvc
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: brossi-dev-floci-az
+  labels:
+    app.kubernetes.io/component: floci-az
+    env: dev
+    owner: brossi
+    tech: floci-az
+  name: brossi-dev-floci-az-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: brossi.dev.floci-az.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-az-service
+            port:
+              number: 4577
+        path: /
+        pathType: Prefix
+  - host: '*.brossi.dev.floci-az.local'
+    http:
+      paths:
+      - backend:
+          service:
+            name: brossi-dev-floci-az-service
+            port:
+              number: 4577
+        path: /
+        pathType: Prefix

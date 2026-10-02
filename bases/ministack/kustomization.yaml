@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Generic, reusable ministack base. Overlays apply namePrefix + commonLabels
+# and patch the ingress host. No namespace is set here; ArgoCD/overlay owns it.
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/component: ministack
+    includeSelectors: false

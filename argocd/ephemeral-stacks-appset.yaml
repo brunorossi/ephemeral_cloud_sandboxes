@@ -21,7 +21,7 @@ spec:
         # TODO: replace with your real GitOps repository URL (same as above).
         repoURL: 'https://github.com/brunorossi/ephemeral_cloud_sandboxes.git'
         targetRevision: HEAD
-        path: '{{path}}'
+        path: '{{overlayPath}}'
       destination:
         server: 'https://kubernetes.default.svc'
         # One isolated namespace per stack instance, named "{id}-{env}-{tech}".

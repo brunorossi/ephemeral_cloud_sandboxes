@@ -38,11 +38,11 @@ These are produced mechanically: the base resources carry bare canonical names
 
 ## How it works
 
-1. `config/stacks.json` lists every stack instance (`id`, `tech`, `env`, `path`).
+1. `config/stacks.json` lists every stack instance (`id`, `tech`, `env`, `overlayPath`).
 2. The ApplicationSet (`argocd/ephemeral-stacks-appset.yaml`) reads that file via a
    Git generator and creates one ArgoCD `Application` per entry, named
    `{{tech}}-{{id}}-{{env}}`.
-3. Each Application syncs the Kustomize overlay at `{{path}}` into namespace
+3. Each Application syncs the Kustomize overlay at `{{overlayPath}}` into namespace
    `{{id}}-{{env}}-{{tech}}` (auto-created). Adding/removing a JSON entry
    provisions/prunes the corresponding cluster resources automatically
    (`prune: true`, `selfHeal: true`).
@@ -98,7 +98,7 @@ kubectl apply -f argocd/ephemeral-stacks-appset.yaml
      `<id>.<env>.<tech>.local` and `*.<id>.<env>.<tech>.local`.
 2. Append an entry to `config/stacks.json`:
    ```json
-   { "id": "<id>", "tech": "<tech>", "env": "<env>", "path": "overlays/<env>/<id>-<env>-<tech>" }
+   { "id": "<id>", "tech": "<tech>", "env": "<env>", "overlayPath": "overlays/<env>/<id>-<env>-<tech>" }
    ```
 3. Commit and push. ArgoCD provisions the stack automatically. Removing the entry
    prunes it.

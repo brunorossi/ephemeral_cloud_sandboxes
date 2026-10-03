@@ -10,7 +10,7 @@ Full usage, arguments, and the OCI Functions wiring notes are documented in
 
 | Cloud | Directory | Scripts |
 |-------|-----------|---------|
-| AWS   | [`aws/`](aws)     | `deploy-lambda.sh`, `deploy-sqs-lambda.sh`, `deploy-apig-lambda.sh` |
+| AWS   | [`aws/`](aws)     | `deploy-lambda.sh`, `deploy-sqs-lambda.sh`, `deploy-apig-lambda.sh`, `deploy-apig-lambda-dynamodb.sh` |
 | GCP   | [`gcp/`](gcp)     | `deploy-cloud-run.sh` |
 | OCI   | [`oci/`](oci)     | `deploy-function.sh` |
 

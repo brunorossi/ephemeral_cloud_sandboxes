@@ -79,6 +79,7 @@ verify them.
 | [`deploy-lambda.sh`](../scripts/aws/deploy-lambda.sh) | Creates a Python Lambda, exposes a Function URL, and invokes it via both the AWS CLI and a direct HTTP `curl`. |
 | [`deploy-sqs-lambda.sh`](../scripts/aws/deploy-sqs-lambda.sh) | Creates an SQS queue + Lambda, wires an event-source mapping, and sends a test message to trigger the function. |
 | [`deploy-apig-lambda.sh`](../scripts/aws/deploy-apig-lambda.sh) | Creates a Lambda behind an API Gateway (HTTP API v2) with a `GET /test` route and invokes it. |
+| [`deploy-apig-lambda-dynamodb.sh`](../scripts/aws/deploy-apig-lambda-dynamodb.sh) | Creates a DynamoDB table + a Lambda that writes to it, fronts it with an API Gateway (HTTP API v2) `POST /items` route, invokes it via `curl`, and scans the table to verify the item was persisted. |
 
 ```bash
 ./scripts/aws/deploy-lambda.sh                       # defaults
